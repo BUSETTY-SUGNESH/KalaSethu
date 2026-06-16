@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# KalaSetu
 
-## Getting Started
+A comprehensive global digital ecosystem for Indian art, built to connect collectors with verified artisans. 
 
-First, run the development server:
+## Overview
+KalaSetu combines a Marketplace, Live Auction System, Artist Verification, Community Forums (CharchaSabha), and Learning Masterclasses into a single unified platform. 
 
+It is built with **Next.js**, **Zustand**, and **Firebase** (Firestore, Auth, Storage, Cloud Functions).
+
+## Features
+* **Auth**: Firebase Authentication with protected routes and server-side middleware.
+* **Marketplace**: Browse authenticated art, filter by category/medium, add to cart.
+* **Live Auctions**: Real-time bidding engine with anti-sniping and pubsub closure via Firebase Cloud Functions.
+* **CharchaSabha**: Community discussion forums with threads, replies, and like-aggregation.
+* **Dashboards**: Dedicated dashboards for Collectors, Artists, and Admins.
+* **Verification System**: Rigorous application flow for artisans to get verified.
+* **Cloud Functions**: Robust backend for order processing, notifications, moderation, and aggregation.
+
+## Setup Instructions
+
+### Prerequisites
+- Node.js 18+
+- Firebase CLI (`npm i -g firebase-tools`)
+
+### Environment Variables
+1. Copy `.env.local.example` to `.env.local`
+2. Fill in your Firebase Project credentials.
+
+### Installation
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Install root dependencies
+npm install
+
+# Install Cloud Functions dependencies
+cd functions
+npm install
+cd ..
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Running Locally
+Run the Next.js development server:
+```bash
+npm run dev
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Run the Firebase Emulators (for backend):
+```bash
+firebase emulators:start
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Architecture
+- `app/`: Next.js App Router containing pages and layouts.
+- `lib/services/`: Service abstraction layer communicating with Firebase.
+- `lib/stores/`: Zustand global state management.
+- `lib/firebase/`: Firebase initialization and helpers.
+- `functions/`: Firebase Cloud Functions backend.

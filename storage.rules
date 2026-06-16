@@ -1,0 +1,132 @@
+// ============================================================
+// KalaSetu — Firebase Storage Security Rules
+// ============================================================
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper: Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper: Check file size
+    function isUnderMaxSize(maxSizeMB) {
+      return request.resource.size < maxSizeMB * 1024 * 1024;
+    }
+
+    // Helper: Check if file is an image
+    function isImage() {
+      return request.resource.contentType.matches('image/(jpeg|png|webp|avif)');
+    }
+
+    // Helper: Check if file is a document
+    function isDocument() {
+      return request.resource.contentType.matches('application/pdf')
+        || request.resource.contentType.matches('image/(jpeg|png)');
+    }
+
+    // ── Artwork Images ────────────────────────────────────
+    // Path: artworks/{artworkId}/{fileName}
+    match /artworks/{artworkId}/{fileName} {
+      // Anyone can read published artwork images
+      allow read: if true;
+
+      // Only authenticated users can upload (artist check done at app level)
+      allow create: if isAuthenticated()
+        && isImage()
+        && isUnderMaxSize(10);
+
+      // Owner can update their images
+      allow update: if isAuthenticated()
+        && isImage()
+        && isUnderMaxSize(10);
+
+      // Owner can delete
+      allow delete: if isAuthenticated();
+    }
+
+    // ── User Avatars & Profile Images ─────────────────────
+    // Path: users/{userId}/{fileName}
+    match /users/{userId}/{fileName} {
+      // Anyone can read user avatars
+      allow read: if true;
+
+      // Only the user can upload their own avatar
+      allow create: if isAuthenticated()
+        && request.auth.uid == userId
+        && isImage()
+        && isUnderMaxSize(5);
+
+      allow update: if isAuthenticated()
+        && request.auth.uid == userId
+        && isImage()
+        && isUnderMaxSize(5);
+
+      allow delete: if isAuthenticated()
+        && request.auth.uid == userId;
+    }
+
+    // ── Verification Documents ────────────────────────────
+    // Path: verifications/{userId}/{fileName}
+    match /verifications/{userId}/{fileName} {
+      // Only the applicant and admins can read
+      allow read: if isAuthenticated()
+        && (request.auth.uid == userId
+            || request.auth.token.admin == true);
+
+      // Only the applicant can upload
+      allow create: if isAuthenticated()
+        && request.auth.uid == userId
+        && isDocument()
+        && isUnderMaxSize(5);
+
+      allow update: if false;
+      allow delete: if isAuthenticated()
+        && request.auth.uid == userId;
+    }
+
+    // ── Post Media ────────────────────────────────────────
+    // Path: posts/{userId}/{fileName}
+    match /posts/{userId}/{fileName} {
+      allow read: if true;
+
+      allow create: if isAuthenticated()
+        && request.auth.uid == userId
+        && isImage()
+        && isUnderMaxSize(10);
+
+      allow delete: if isAuthenticated()
+        && request.auth.uid == userId;
+    }
+
+    // ── Chat Media ────────────────────────────────────────
+    // Path: chats/{roomId}/{fileName}
+    match /chats/{roomId}/{fileName} {
+      allow read: if isAuthenticated();
+
+      allow create: if isAuthenticated()
+        && isImage()
+        && isUnderMaxSize(10);
+
+      allow delete: if false;
+    }
+
+    // ── Event Images ──────────────────────────────────────
+    // Path: events/{eventId}/{fileName}
+    match /events/{eventId}/{fileName} {
+      allow read: if true;
+
+      allow create: if isAuthenticated()
+        && isImage()
+        && isUnderMaxSize(10);
+
+      allow delete: if isAuthenticated();
+    }
+
+    // Deny everything else
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

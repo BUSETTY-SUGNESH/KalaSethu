@@ -1,0 +1,99 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.aggregateAnalytics = exports.verifyArtist = void 0;
+const functions = __importStar(require("firebase-functions/v1"));
+const admin = __importStar(require("firebase-admin"));
+const db = admin.firestore();
+exports.verifyArtist = functions.https.onCall(async (data, context) => {
+    // Only admins can call this
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+    }
+    // Verify admin status
+    const userDoc = await db.collection("users").doc(context.auth.uid).get();
+    const userData = userDoc.data();
+    if (userData?.role !== 'admin') {
+        throw new functions.https.HttpsError('permission-denied', 'Must be an admin');
+    }
+    const { targetUserId, isVerified } = data;
+    if (!targetUserId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Target User ID is required');
+    }
+    try {
+        const role = isVerified ? 'verified_artist' : 'artist';
+        await db.collection("users").doc(targetUserId).update({
+            role,
+            isVerified,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        // Notify the user
+        await db.collection("users").doc(targetUserId).collection("notifications").add({
+            userId: targetUserId,
+            title: "Verification Status Updated",
+            message: isVerified ? "Congratulations! You are now a Verified Artisan." : "Your verification status has been updated.",
+            type: "system",
+            isRead: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        return { success: true, role, isVerified };
+    }
+    catch (error) {
+        console.error("Verification error", error);
+        throw new functions.https.HttpsError('internal', 'Failed to update verification status');
+    }
+});
+// A scheduled function to aggregate analytics for the admin dashboard
+exports.aggregateAnalytics = functions.pubsub.schedule('every 24 hours').onRun(async (context) => {
+    try {
+        const [usersSnap, artworksSnap, ordersSnap] = await Promise.all([
+            db.collection("users").count().get(),
+            db.collection("artworks").count().get(),
+            db.collection("orders").count().get()
+        ]);
+        await db.collection("analytics").doc("platform_stats").set({
+            totalUsers: usersSnap.data().count,
+            totalArtworks: artworksSnap.data().count,
+            totalOrders: ordersSnap.data().count,
+            lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        console.log("Successfully aggregated analytics");
+    }
+    catch (error) {
+        console.error("Error aggregating analytics", error);
+    }
+    return null;
+});
+//# sourceMappingURL=admin.js.map

@@ -1,0 +1,365 @@
+// ============================================================
+// KalaSetu — Firestore Security Rules
+// Role-based access control for all collections
+// ============================================================
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper Functions ──────────────────────────────────
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && getUserRole() == 'admin';
+    }
+
+    function isModerator() {
+      return isAuthenticated() && (getUserRole() == 'moderator' || getUserRole() == 'admin');
+    }
+
+    function isArtist() {
+      return isAuthenticated() && getUserRole() in ['artist', 'verified_artist', 'admin'];
+    }
+
+    function isVerifiedArtist() {
+      return isAuthenticated() && getUserRole() in ['verified_artist', 'admin'];
+    }
+
+    function isValidString(field, minLen, maxLen) {
+      return field is string && field.size() >= minLen && field.size() <= maxLen;
+    }
+
+    function isValidPrice() {
+      return request.resource.data.price is number && request.resource.data.price >= 0;
+    }
+
+    // ── Users ─────────────────────────────────────────────
+
+    match /users/{userId} {
+      // Anyone can read user profiles (public profiles)
+      allow read: if true;
+
+      // Users can create their own profile
+      allow create: if isOwner(userId)
+        && isValidString(request.resource.data.displayName, 1, 100)
+        && request.resource.data.role in ['user', 'artist'];
+
+      // Users can update their own profile (but not role, isVerified, isBanned)
+      allow update: if (isOwner(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['role', 'isVerified', 'isBanned']))
+        || isAdmin();
+
+      // Only admin can delete users
+      allow delete: if isAdmin();
+
+      // Followers subcollection
+      match /followers/{followerId} {
+        allow read: if true;
+        allow write: if isAuthenticated();
+      }
+
+      // Following subcollection
+      match /following/{followingId} {
+        allow read: if true;
+        allow write: if isOwner(userId);
+      }
+
+      // User notifications
+      match /notifications/{notifId} {
+        allow read: if isOwner(userId);
+        allow create: if isAuthenticated();
+        allow update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // ── Artworks ──────────────────────────────────────────
+
+    match /artworks/{artworkId} {
+      // Published artworks are public; drafts visible to owner and admin
+      allow read: if resource.data.status == 'published'
+        || isOwner(resource.data.artistId)
+        || isAdmin();
+
+      // Artists can create artworks
+      allow create: if isArtist()
+        && request.resource.data.artistId == request.auth.uid
+        && isValidString(request.resource.data.title, 1, 200);
+
+      // Owner can update their artworks; admin can update any
+      allow update: if isOwner(resource.data.artistId) || isAdmin();
+
+      // Owner can delete drafts; admin can delete any
+      allow delete: if (isOwner(resource.data.artistId)
+        && resource.data.status in ['draft', 'archived'])
+        || isAdmin();
+    }
+
+    // ── Auctions ──────────────────────────────────────────
+
+    match /auctions/{auctionId} {
+      // Active auctions are public
+      allow read: if true;
+
+      // Artists can create auctions for their artworks
+      allow create: if isArtist()
+        && request.resource.data.artistId == request.auth.uid;
+
+      // Only Cloud Functions should update auctions (bids, status changes)
+      // Allow admin for emergency overrides
+      allow update: if isAdmin();
+
+      // Admin can cancel auctions
+      allow delete: if isAdmin();
+    }
+
+    // ── Bids ──────────────────────────────────────────────
+
+    match /bids/{bidId} {
+      // Authenticated users can read bids
+      allow read: if isAuthenticated();
+
+      // Bids are ONLY created via Cloud Functions (server-side validation)
+      allow create: if false;
+
+      // No client-side bid updates
+      allow update: if false;
+
+      allow delete: if isAdmin();
+    }
+
+    // ── Orders ────────────────────────────────────────────
+
+    match /orders/{orderId} {
+      // Buyer and seller can read their orders; admin can read all
+      allow read: if isOwner(resource.data.buyerId)
+        || isOwner(resource.data.sellerId)
+        || isAdmin();
+
+      // Orders created via checkout flow (authenticated)
+      allow create: if isAuthenticated()
+        && request.resource.data.buyerId == request.auth.uid;
+
+      // Status updates mostly via Cloud Functions
+      // Seller can update shipping info; admin can update anything
+      allow update: if (isOwner(resource.data.sellerId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'trackingNumber', 'shippingProvider', 'sellerNotes', 'statusHistory', 'updatedAt']))
+        || isAdmin();
+
+      allow delete: if false;
+    }
+
+    // ── Payments ──────────────────────────────────────────
+
+    match /payments/{paymentId} {
+      // Only buyer/seller and admin can read
+      allow read: if isAuthenticated();
+
+      // Payments only created by Cloud Functions
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ── Carts ─────────────────────────────────────────────
+
+    match /carts/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
+    }
+
+    // ── Favorites / Bookmarks ─────────────────────────────
+
+    match /favorites/{favoriteId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // ── Collections ───────────────────────────────────────
+
+    match /collections/{collectionId} {
+      allow read: if resource.data.isPublic || isOwner(resource.data.userId);
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid;
+      allow update: if isOwner(resource.data.userId);
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // ── Posts ──────────────────────────────────────────────
+
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if isAuthenticated()
+        && request.resource.data.authorId == request.auth.uid;
+      allow update: if isOwner(resource.data.authorId) || isModerator();
+      allow delete: if isOwner(resource.data.authorId) || isModerator();
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isAuthenticated();
+        allow update: if isAuthenticated()
+          && resource.data.authorId == request.auth.uid;
+        allow delete: if (isAuthenticated()
+          && resource.data.authorId == request.auth.uid)
+          || isModerator();
+      }
+
+      match /likes/{likeId} {
+        allow read: if true;
+        allow create: if isAuthenticated();
+        allow delete: if isAuthenticated();
+      }
+    }
+
+    // ── Chat Rooms ────────────────────────────────────────
+
+    match /chatRooms/{roomId} {
+      allow read: if isAuthenticated()
+        && request.auth.uid in resource.data.participants;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated()
+        && request.auth.uid in resource.data.participants;
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated()
+          && request.auth.uid in get(/databases/$(database)/documents/chatRooms/$(roomId)).data.participants;
+        allow create: if isAuthenticated()
+          && request.resource.data.senderId == request.auth.uid;
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
+
+    // ── Events ────────────────────────────────────────────
+
+    match /events/{eventId} {
+      allow read: if true;
+      allow create: if isArtist() || isAdmin();
+      allow update: if isOwner(resource.data.organizerId) || isAdmin();
+      allow delete: if isOwner(resource.data.organizerId) || isAdmin();
+
+      match /registrations/{regId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update: if isOwner(regId) || isAdmin();
+        allow delete: if isOwner(regId) || isAdmin();
+      }
+    }
+
+    // ── Workshops ─────────────────────────────────────────
+
+    match /workshops/{workshopId} {
+      allow read: if true;
+      allow create: if isArtist() || isAdmin();
+      allow update: if isOwner(resource.data.instructorId) || isAdmin();
+      allow delete: if isAdmin();
+
+      match /enrollments/{enrollId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update: if isOwner(enrollId) || isAdmin();
+      }
+    }
+
+    // ── Notifications ─────────────────────────────────────
+
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated()
+        && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated()
+        && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // ── Reports ───────────────────────────────────────────
+
+    match /reports/{reportId} {
+      allow read: if isModerator();
+      allow create: if isAuthenticated()
+        && request.resource.data.reporterId == request.auth.uid;
+      allow update: if isModerator();
+      allow delete: if isAdmin();
+    }
+
+    // ── Artist Verifications ──────────────────────────────
+
+    match /artistVerifications/{verifId} {
+      allow read: if isOwner(resource.data.artistId) || isAdmin();
+      allow create: if isArtist()
+        && request.resource.data.artistId == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── Categories ────────────────────────────────────────
+
+    match /categories/{catId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Tags ──────────────────────────────────────────────
+
+    match /tags/{tagId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Admin Logs ────────────────────────────────────────
+
+    match /adminLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ── Audit Logs ────────────────────────────────────────
+
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ── Analytics ─────────────────────────────────────────
+
+    match /analytics/{docId} {
+      allow read: if isAdmin();
+      allow write: if false; // Only Cloud Functions
+    }
+
+    // ── Feature Flags ─────────────────────────────────────
+
+    match /featureFlags/{flagId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── System Configs ────────────────────────────────────
+
+    match /systemConfigs/{configId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+  }
+}
