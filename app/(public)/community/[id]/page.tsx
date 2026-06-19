@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
-import { getPost, getComments, addComment, toggleLikePost } from "@/lib/services/community-service";
+import { getPost, getComments, addComment, toggleLikePost, hasUserLikedPost } from "@/lib/services/community-service";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useUIStore } from "@/lib/stores/ui-store";
 import type { Post, Comment } from "@/app/types";
@@ -25,6 +25,7 @@ export default function PostDetailPage() {
   const [newComment, setNewComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
+  const [hasLiked, setHasLiked] = useState(false);
 
   useEffect(() => {
     if (!postId) return;
@@ -38,6 +39,9 @@ export default function PostDetailPage() {
         
         if (postData) setPost(postData);
         setComments(commentsData);
+        if (postData && user) {
+          setHasLiked(await hasUserLikedPost(postData.id, user.id));
+        }
       } catch (error) {
         console.error("Failed to load post data", error);
       } finally {
@@ -46,7 +50,7 @@ export default function PostDetailPage() {
     }
 
     loadData();
-  }, [postId]);
+  }, [postId, user]);
 
   async function handleLike() {
     if (!isAuthenticated || !user) {
@@ -58,10 +62,9 @@ export default function PostDetailPage() {
     
     setIsLiking(true);
     try {
-      await toggleLikePost(post.id, user.id, user.displayName);
-      // Optimistic update - this is a simplification. 
-      // A full implementation would check if the user already liked it.
-      setPost(prev => prev ? { ...prev, likeCount: prev.likeCount + 1 } : prev);
+      const liked = await toggleLikePost(post.id, user.id, user.displayName);
+      setHasLiked(liked);
+      setPost(prev => prev ? { ...prev, likeCount: Math.max(0, prev.likeCount + (liked ? 1 : -1)) } : prev);
     } catch (error) {
       console.error(error);
     } finally {
@@ -179,7 +182,7 @@ export default function PostDetailPage() {
                   disabled={isLiking}
                   className="flex items-center gap-8 text-on-surface-variant hover:text-accent-terracotta transition-colors"
                 >
-                  <Icon name="favorite_border" />
+                  <Icon name={hasLiked ? "favorite" : "favorite_border"} />
                   <span className="text-label-md">{post.likeCount} Likes</span>
                 </button>
                 <div className="flex items-center gap-8 text-on-surface-variant">

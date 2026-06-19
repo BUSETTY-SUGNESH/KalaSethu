@@ -51,16 +51,7 @@ export const chatRepository = {
     return ref.id;
   },
 
-  async getUserRooms(userId: string, max: number = 30): Promise<ChatRoom[]> {
-    const q = query(
-      collections.chatRooms(),
-      where('participants', 'array-contains', userId),
-      orderBy('updatedAt', 'desc'),
-      limit(max)
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }) as ChatRoom);
-  },
+
 
   subscribeToRooms(userId: string, cb: (rooms: ChatRoom[]) => void): Unsubscribe {
     const q = query(

@@ -38,9 +38,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.verifyPayment = exports.createOrder = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
+const admin = __importStar(require("firebase-admin"));
 const razorpay_1 = __importDefault(require("razorpay"));
 const crypto = __importStar(require("crypto"));
-const order_repository_1 = require("./repositories/order.repository");
 // Phase E: Razorpay Integration
 exports.createOrder = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
@@ -94,15 +94,73 @@ exports.verifyPayment = functions.https.onCall(async (data, context) => {
             .digest('hex');
         if (expectedSignature === razorpay_signature) {
             // Payment is verified successfully
-            // Save the order to Firestore
-            const orderId = await order_repository_1.orderRepository.createOrder({
-                buyerId: context.auth.uid,
-                ...orderDetails,
-                paymentId: razorpay_payment_id,
-                paymentOrderId: razorpay_order_id,
-                status: "processing", // Initial status
+            const userRecord = await admin.auth().getUser(context.auth.uid);
+            const buyerName = userRecord.displayName || "Anonymous";
+            const buyerEmail = userRecord.email || "";
+            const items = orderDetails.items || [];
+            // Group items by seller (artistId)
+            const sellerGroups = {};
+            items.forEach((item) => {
+                const artistId = item.artistId || "unknown_artist";
+                if (!sellerGroups[artistId]) {
+                    sellerGroups[artistId] = [];
+                }
+                sellerGroups[artistId].push(item);
             });
-            return { success: true, orderId };
+            const orderIds = [];
+            const batch = admin.firestore().batch();
+            const db = admin.firestore();
+            // We will create one order per seller
+            for (const [sellerId, sellerItems] of Object.entries(sellerGroups)) {
+                const subtotal = sellerItems.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
+                const shippingCost = 0;
+                const tax = 0;
+                const totalAmount = subtotal + shippingCost + tax;
+                const newOrderRef = db.collection('orders').doc();
+                const orderData = {
+                    id: newOrderRef.id,
+                    buyerId: context.auth.uid,
+                    buyerName,
+                    buyerEmail,
+                    sellerId,
+                    sellerName: sellerItems[0]?.artistName || "Unknown Artist",
+                    items: sellerItems,
+                    subtotal,
+                    shippingCost,
+                    tax,
+                    totalAmount,
+                    currency: 'INR',
+                    shippingAddress: orderDetails.shippingAddress,
+                    paymentId: razorpay_payment_id,
+                    paymentOrderId: razorpay_order_id,
+                    paymentStatus: 'completed',
+                    status: 'processing',
+                    statusHistory: [
+                        {
+                            status: 'processing',
+                            timestamp: new Date().toISOString(),
+                            note: 'Payment verified and order created',
+                            updatedBy: 'system'
+                        }
+                    ],
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                };
+                batch.set(newOrderRef, orderData);
+                orderIds.push(newOrderRef.id);
+                // Update the status of each artwork to 'sold'
+                for (const item of sellerItems) {
+                    if (item.artworkId) {
+                        const artworkRef = db.collection('artworks').doc(item.artworkId);
+                        batch.update(artworkRef, {
+                            status: 'sold',
+                            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                        });
+                    }
+                }
+            }
+            await batch.commit();
+            return { success: true, orderId: orderIds[0] };
         }
         else {
             console.warn("Invalid payment signature detected", { expectedSignature, received: razorpay_signature });

@@ -178,6 +178,7 @@ export default function SignupPage() {
                 onChange={(e) => setName(e.target.value)}
                 required
                 disabled={isLoading}
+                suppressHydrationWarning
               />
             </div>
 
@@ -194,6 +195,7 @@ export default function SignupPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
+                suppressHydrationWarning
               />
             </div>
 
@@ -211,6 +213,7 @@ export default function SignupPage() {
                 required
                 minLength={8}
                 disabled={isLoading}
+                suppressHydrationWarning
               />
               <span className="text-caption text-on-surface-variant">
                 Minimum 8 characters
@@ -242,6 +245,7 @@ export default function SignupPage() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               disabled={isLoading}
+              suppressHydrationWarning
             />
           </div>
           <Button variant="primary" size="lg" fullWidth onClick={handlePhoneSend} disabled={isLoading || !phone}>
@@ -257,7 +261,18 @@ export default function SignupPage() {
         <div className="flex flex-col gap-24">
           <div className="form-group">
             <label htmlFor="otp" className="form-label">Enter OTP</label>
-            <input type="text" id="otp" className="form-input text-center text-headline-sm" placeholder="Enter 6-digit code" value={otp} onChange={(e) => setOtp(e.target.value)} maxLength={6} disabled={isLoading} style={{ letterSpacing: '0.3em' }} />
+            <input
+              type="text"
+              id="otp"
+              className="form-input text-center text-headline-sm"
+              placeholder="Enter 6-digit code"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              maxLength={6}
+              disabled={isLoading}
+              style={{ letterSpacing: '0.3em' }}
+              suppressHydrationWarning
+            />
           </div>
           <Button variant="primary" size="lg" fullWidth onClick={handleVerifyOtp} disabled={isLoading || otp.length < 6}>
             {isLoading ? 'Verifying...' : 'Verify OTP'}

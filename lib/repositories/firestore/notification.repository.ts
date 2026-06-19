@@ -2,7 +2,7 @@
 // KalaSetu — Notification Repository (Firestore Implementation)
 // ============================================================
 import {
-  collections,
+  subcollections,
   docRef,
   getDoc,
   getDocs,
@@ -21,25 +21,24 @@ import {
 import type { Notification, PaginatedResult } from '@/app/types';
 
 export const notificationRepository = {
-  async findById(id: string): Promise<Notification | null> {
-    const snap = await getDoc(docRef.notification(id));
+  async findById(userId: string, id: string): Promise<Notification | null> {
+    const snap = await getDoc(docRef.userNotification(userId, id));
     if (!snap.exists()) return null;
     return { id: snap.id, ...snap.data() } as Notification;
   },
 
   async create(data: Omit<Notification, 'id'>): Promise<string> {
-    const ref = await addDoc(collections.notifications(), data);
+    const ref = await addDoc(subcollections.userNotifications(data.userId), data);
     return ref.id;
   },
 
-  async markRead(id: string): Promise<void> {
-    await updateDoc(docRef.notification(id), { isRead: true });
+  async markRead(userId: string, id: string): Promise<void> {
+    await updateDoc(docRef.userNotification(userId, id), { isRead: true });
   },
 
   async markAllRead(userId: string): Promise<void> {
     const q = query(
-      collections.notifications(),
-      where('userId', '==', userId),
+      subcollections.userNotifications(userId),
       where('isRead', '==', false),
       limit(100)
     );
@@ -49,8 +48,8 @@ export const notificationRepository = {
     await batch.commit();
   },
 
-  async delete(id: string): Promise<void> {
-    await deleteDoc(docRef.notification(id));
+  async delete(userId: string, id: string): Promise<void> {
+    await deleteDoc(docRef.userNotification(userId, id));
   },
 
   async getForUser(
@@ -59,8 +58,8 @@ export const notificationRepository = {
     lastDoc?: DocumentSnapshot | null
   ): Promise<PaginatedResult<Notification>> {
     return paginatedQuery<Notification>(
-      collections.notifications(),
-      [where('userId', '==', userId), orderBy('createdAt', 'desc')],
+      subcollections.userNotifications(userId),
+      [orderBy('createdAt', 'desc')],
       pageSize,
       lastDoc
     );
@@ -68,8 +67,7 @@ export const notificationRepository = {
 
   async getUnreadCount(userId: string): Promise<number> {
     const q = query(
-      collections.notifications(),
-      where('userId', '==', userId),
+      subcollections.userNotifications(userId),
       where('isRead', '==', false),
       limit(100)
     );

@@ -6,6 +6,7 @@ import {
   persistentLocalCache,
   persistentMultipleTabManager,
   collection,
+  collectionGroup,
   doc,
   getDoc,
   getDocs,
@@ -39,6 +40,7 @@ import { app } from './config';
 
 // Initialize Firestore with IndexedDB local cache enabled
 const db: Firestore = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
   localCache: persistentLocalCache({ 
     tabManager: persistentMultipleTabManager() 
   })
@@ -79,6 +81,8 @@ export const subcollections = {
     collection(db, 'users', userId, 'following'),
   userNotifications: (userId: string) =>
     collection(db, 'users', userId, 'notifications'),
+  userAddresses: (userId: string) =>
+    collection(db, 'users', userId, 'addresses'),
   postComments: (postId: string) =>
     collection(db, 'posts', postId, 'comments'),
   postLikes: (postId: string) =>
@@ -89,6 +93,8 @@ export const subcollections = {
     collection(db, 'events', eventId, 'registrations'),
   workshopEnrollments: (workshopId: string) =>
     collection(db, 'workshops', workshopId, 'enrollments'),
+  auctionBids: (auctionId: string) =>
+    collection(db, 'auctions', auctionId, 'bids'),
 } as const;
 
 // --- Document References ---
@@ -97,6 +103,7 @@ export const docRef = {
   artwork: (artworkId: string) => doc(db, 'artworks', artworkId),
   auction: (auctionId: string) => doc(db, 'auctions', auctionId),
   bid: (bidId: string) => doc(db, 'bids', bidId),
+  auctionBid: (auctionId: string, bidId: string) => doc(db, 'auctions', auctionId, 'bids', bidId),
   order: (orderId: string) => doc(db, 'orders', orderId),
   payment: (paymentId: string) => doc(db, 'payments', paymentId),
   cart: (userId: string) => doc(db, 'carts', userId),
@@ -105,6 +112,8 @@ export const docRef = {
   event: (eventId: string) => doc(db, 'events', eventId),
   workshop: (workshopId: string) => doc(db, 'workshops', workshopId),
   notification: (notifId: string) => doc(db, 'notifications', notifId),
+  userNotification: (userId: string, notifId: string) => doc(db, 'users', userId, 'notifications', notifId),
+  userAddress: (userId: string, addressId: string) => doc(db, 'users', userId, 'addresses', addressId),
   report: (reportId: string) => doc(db, 'reports', reportId),
   verification: (verifId: string) => doc(db, 'artistVerifications', verifId),
   category: (catId: string) => doc(db, 'categories', catId),
@@ -119,12 +128,12 @@ export function timestampToISO(timestamp: Timestamp | null | undefined): string 
 // --- Helper: Paginated query ---
 export interface PaginatedResult<T> {
   data: T[];
-  lastDoc: DocumentSnapshot | null;
+  lastDoc: any;
   hasMore: boolean;
 }
 
 export async function paginatedQuery<T>(
-  collectionRef: CollectionReference,
+  collectionRef: any,
   constraints: QueryConstraint[],
   pageSize: number,
   lastDocument?: DocumentSnapshot | null,
@@ -142,8 +151,8 @@ export async function paginatedQuery<T>(
   const docs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
 
   return {
-    data: docs.map((d) => ({ id: d.id, ...d.data() } as T)),
-    lastDoc: docs.length > 0 ? docs[docs.length - 1] : null,
+    data: docs.map((d) => ({ id: d.id, ...(d.data() as any) } as T)),
+    lastDoc: docs.length > 0 ? (docs[docs.length - 1] as any) : null,
     hasMore,
   };
 }
@@ -187,6 +196,7 @@ export function updateDoc(reference: DocumentReference, data: any) {
 export {
   db,
   doc,
+  collectionGroup,
   getDoc,
   getDocs,
   deleteDoc,

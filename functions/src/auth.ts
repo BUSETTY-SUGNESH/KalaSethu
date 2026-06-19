@@ -22,6 +22,16 @@ export const onUserCreated = functions.auth.user().onCreate(async (user) => {
       followingCount: 0
     });
     
+    // Add welcome notification
+    await db.collection("users").doc(uid).collection("notifications").add({
+      userId: uid,
+      title: "Welcome to KalaSetu!",
+      message: `Hello ${displayName || "Art Lover"}! Welcome to KalaSetu, the social platform celebrating authentic heritage and artisan craftsmanship.`,
+      type: "system",
+      isRead: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
     console.log(`Successfully created profile for user: ${uid}`);
   } catch (error) {
     console.error(`Failed to create profile for user: ${uid}`, error);

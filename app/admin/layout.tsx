@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Icon from "@/app/components/ui/Icon";
 import Sidebar from "@/app/components/layout/Sidebar";
+import AuthGuard from "@/app/components/guards/AuthGuard";
 
 const adminNav = [
   { label: "Platform Overview", href: "/admin", icon: "monitoring" },
@@ -17,7 +18,7 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    <>
+    <AuthGuard requiredRole="admin">
       {/* Admin Header (Different from public header) */}
       <header className="site-header" style={{ backgroundColor: "var(--color-primary)" }}>
         <div className="container header-inner">
@@ -41,6 +42,6 @@ export default function AdminLayout({
           {children}
         </main>
       </div>
-    </>
+    </AuthGuard>
   );
 }

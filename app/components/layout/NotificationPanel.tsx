@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useUIStore } from '@/lib/stores/ui-store';
 import {
@@ -18,6 +19,7 @@ export default function NotificationPanel() {
   const { isNotificationPanelOpen, setNotificationPanelOpen, setUnreadNotificationCount } = useUIStore();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (!user) return;
@@ -62,10 +64,13 @@ export default function NotificationPanel() {
   if (!isNotificationPanelOpen || !user) return null;
 
   async function handleNotificationClick(notification: Notification) {
-    if (!notification.isRead) {
-      await markNotificationAsRead(notification.id);
+    if (user && !notification.isRead) {
+      await markNotificationAsRead(user.id, notification.id);
     }
     setNotificationPanelOpen(false);
+    if (notification.actionUrl) {
+      router.push(notification.actionUrl);
+    }
   }
 
   async function handleMarkAllRead() {
@@ -119,6 +124,8 @@ export default function NotificationPanel() {
             <div
               key={notif.id}
               className={`notification-item ${!notif.isRead ? 'unread' : ''}`}
+              onClick={() => handleNotificationClick(notif)}
+              style={{ cursor: 'pointer' }}
             >
               <div
                 className="trust-icon-wrap"

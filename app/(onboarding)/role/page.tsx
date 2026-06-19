@@ -1,7 +1,42 @@
-import Link from "next/link";
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Icon from "@/app/components/ui/Icon";
+import { updateUserProfile } from "@/lib/services/user-service";
+import { useAuthStore } from "@/lib/stores/auth-store";
+import { useUIStore } from "@/lib/stores/ui-store";
+import type { UserRole } from "@/app/types";
 
 export default function RoleSelectionPage() {
+  const router = useRouter();
+  const { user, setUser } = useAuthStore();
+  const { addToast } = useUIStore();
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
+
+  async function chooseRole(role: "user" | "artist") {
+    if (!user) {
+      router.push("/login?redirect=/role");
+      return;
+    }
+
+    setSelectedRole(role);
+    try {
+      await updateUserProfile(user.id, { role });
+      setUser({ ...user, role });
+      router.push(role === "artist" ? "/dashboard/artist" : "/dashboard");
+    } catch (error) {
+      console.error("Failed to update role", error);
+      addToast({
+        type: "error",
+        title: "Role Not Saved",
+        message: "We could not save your role. Please try again.",
+      });
+    } finally {
+      setSelectedRole(null);
+    }
+  }
+
   return (
     <div className="flex flex-col items-center w-full max-w-4xl" style={{ margin: "0 auto" }}>
       <div className="text-center" style={{ marginBottom: 48 }}>
@@ -13,7 +48,12 @@ export default function RoleSelectionPage() {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 32, width: "100%" }}>
         {/* Collector Role */}
-        <Link href="/dashboard" className="role-card">
+        <button
+          type="button"
+          className="role-card"
+          onClick={() => chooseRole("user")}
+          disabled={selectedRole !== null}
+        >
           <div className="flex flex-col items-center text-center gap-16">
             <div style={{ width: 80, height: 80, borderRadius: "50%", backgroundColor: "var(--color-surface-container-high)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-primary)" }}>
               <Icon name="account_balance" size={40} />
@@ -25,10 +65,15 @@ export default function RoleSelectionPage() {
               </p>
             </div>
           </div>
-        </Link>
+        </button>
 
         {/* Artist Role */}
-        <Link href="/dashboard/artist" className="role-card">
+        <button
+          type="button"
+          className="role-card"
+          onClick={() => chooseRole("artist")}
+          disabled={selectedRole !== null}
+        >
           <div className="flex flex-col items-center text-center gap-16">
             <div style={{ width: 80, height: 80, borderRadius: "50%", backgroundColor: "var(--color-surface-container-high)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-primary)" }}>
               <Icon name="palette" size={40} />
@@ -40,7 +85,7 @@ export default function RoleSelectionPage() {
               </p>
             </div>
           </div>
-        </Link>
+        </button>
       </div>
     </div>
   );

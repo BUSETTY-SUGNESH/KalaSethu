@@ -1,5 +1,12 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Icon from "@/app/components/ui/Icon";
+import { toggleBookmark } from "@/lib/services/community-service";
+import { useAuthStore } from "@/lib/stores/auth-store";
+import { useUIStore } from "@/lib/stores/ui-store";
 
 interface ArtworkCardProps {
   id: string;
@@ -16,11 +23,47 @@ export default function ArtworkCard({
   price,
   imageUrl,
 }: ArtworkCardProps) {
+  const router = useRouter();
+  const { user, isAuthenticated } = useAuthStore();
+  const { addToast } = useUIStore();
+  const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  async function handleToggleFavorite() {
+    if (!isAuthenticated || !user) {
+      router.push(`/login?redirect=/artwork/${id}`);
+      return;
+    }
+
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      const saved = await toggleBookmark(user.id, id, "artwork");
+      setIsSaved(saved);
+      addToast({
+        type: saved ? "success" : "info",
+        title: saved ? "Artwork Saved" : "Artwork Removed",
+        message: saved ? "Added to your saved artworks." : "Removed from your saved artworks.",
+      });
+    } catch (error) {
+      console.error("Failed to toggle favorite", error);
+      addToast({ type: "error", title: "Could Not Save", message: "Please try again." });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <article className="card artwork-card">
       <div className="artwork-card-img-wrap">
-        <button className="artwork-card-fav" aria-label="Add to favorites">
-          <Icon name="favorite" size={20} />
+        <button
+          type="button"
+          className="artwork-card-fav"
+          aria-label={isSaved ? "Remove from saved artworks" : "Save artwork"}
+          onClick={handleToggleFavorite}
+          disabled={isSaving}
+        >
+          <Icon name={isSaved ? "favorite" : "favorite_border"} size={20} />
         </button>
         <Link href={`/artwork/${id}`}>
           <img src={imageUrl} alt={title} className="card-img" />

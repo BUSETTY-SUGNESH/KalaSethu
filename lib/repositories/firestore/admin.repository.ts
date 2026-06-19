@@ -11,6 +11,7 @@ import {
   updateDoc,
   setDoc,
   doc,
+  db,
   query,
   where,
   orderBy,
@@ -133,5 +134,11 @@ export const adminRepository = {
     const snap = await getDocs(q);
     if (snap.empty) return null;
     return { id: snap.docs[0].id, ...snap.docs[0].data() } as unknown as PlatformAnalytics;
+  },
+
+  async getPlatformStats(): Promise<any | null> {
+    const snap = await getDoc(doc(db, 'analytics', 'platform_stats'));
+    if (!snap.exists()) return null;
+    return snap.data();
   },
 };

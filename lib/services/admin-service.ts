@@ -3,6 +3,8 @@
 // Business logic layer bridging UI to Repository layer.
 // ============================================================
 import { adminRepository } from '@/lib/repositories';
+import { functions } from "@/lib/firebase/config";
+import { httpsCallable } from "firebase/functions";
 import type {
   ArtistVerification,
   VerificationStatus,
@@ -11,6 +13,7 @@ import type {
   AdminLog,
   PaginatedResult,
   PlatformAnalytics,
+  FeatureFlag,
 } from '@/app/types';
 import type { DocumentSnapshot } from '@/lib/firebase/firestore';
 
@@ -155,4 +158,36 @@ export async function getAdminLogs(
 
 export async function getLatestAnalytics(): Promise<PlatformAnalytics | null> {
   return adminRepository.getLatestAnalytics('monthly');
+}
+
+export async function getPlatformStats(): Promise<any | null> {
+  return adminRepository.getPlatformStats();
+}
+
+export async function verifyArtist(
+  targetUserId: string,
+  isVerified: boolean,
+  verificationId: string
+): Promise<any> {
+  const verifyArtistFn = httpsCallable(functions, 'verifyArtist');
+  const result = await verifyArtistFn({ targetUserId, isVerified, verificationId });
+  return result.data;
+}
+
+export async function moderateArtwork(
+  artworkId: string,
+  action: 'approve' | 'reject',
+  reason?: string
+): Promise<any> {
+  const moderateArtworkFn = httpsCallable(functions, 'moderateArtwork');
+  const result = await moderateArtworkFn({ artworkId, action, reason });
+  return result.data;
+}
+
+export async function getFeatureFlags(): Promise<FeatureFlag[]> {
+  return adminRepository.getAllFeatureFlags();
+}
+
+export async function setFeatureFlag(id: string, enabled: boolean, description?: string): Promise<void> {
+  return adminRepository.setFeatureFlag(id, { enabled, description });
 }

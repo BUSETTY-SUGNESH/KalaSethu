@@ -145,6 +145,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
+                suppressHydrationWarning
               />
             </div>
 
@@ -169,6 +170,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
+                suppressHydrationWarning
               />
             </div>
 
@@ -228,6 +230,7 @@ export default function LoginPage() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               disabled={isLoading}
+              suppressHydrationWarning
             />
           </div>
           <Button
@@ -265,6 +268,7 @@ export default function LoginPage() {
               maxLength={6}
               disabled={isLoading}
               style={{ letterSpacing: '0.3em' }}
+              suppressHydrationWarning
             />
           </div>
           <Button

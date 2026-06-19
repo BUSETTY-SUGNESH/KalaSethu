@@ -39,6 +39,7 @@ export interface User {
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;
+  preferences?: any;
 }
 
 export interface UserProfile {
@@ -231,6 +232,13 @@ export interface ShippingAddress {
   country: string;
 }
 
+export interface UserAddress extends ShippingAddress {
+  id: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Order {
   id: string;
   buyerId: string;
@@ -352,7 +360,7 @@ export interface Comment {
   authorAvatarUrl?: string;
   content: string;
   likeCount: number;
-  parentCommentId?: string; // For nested replies
+  parentCommentId?: string | null; // For nested replies
   replyCount: number;
   createdAt: string;
   updatedAt: string;

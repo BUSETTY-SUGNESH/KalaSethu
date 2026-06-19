@@ -49,8 +49,23 @@ firebase emulators:start
 ```
 
 ## Architecture
-- `app/`: Next.js App Router containing pages and layouts.
-- `lib/services/`: Service abstraction layer communicating with Firebase.
+- `app/`: Next.js App Router containing pages, layouts, and admin views.
+- `lib/services/`: Service abstraction layer communicating with Firestore and Cloud Functions.
+- `lib/repositories/`: Repository pattern implementations for data operations.
 - `lib/stores/`: Zustand global state management.
-- `lib/firebase/`: Firebase initialization and helpers.
-- `functions/`: Firebase Cloud Functions backend.
+- `lib/firebase/`: Firebase initialization and configurations.
+- `functions/`: Cloud Functions (TypeScript) handling triggers, notifications, and verification.
+
+## Database & Security Architecture
+* **User Notifications**: Stored in a nested subcollection (`/users/{userId}/notifications/{notificationId}`) for high performance, strict owner-only read security, and isolation.
+* **Auction Bids**: Stored under `/auctions/{auctionId}/auctionBids/{bidId}` to enable structured querying, auction-isolated bid histories, and real-time subscription streams.
+* **Security Rules**: Strictly configured Firestore rules enforcing:
+  - Read/Write checks for specific user roles (`artist`, `verified_artist`, `moderator`, `admin`).
+  - Owner-only notification retrieval.
+  - Public read-only auction bids but validated bid creation rules.
+* **Cloud Functions**:
+  - `onUserCreated`: Initialises collector profile and sends a welcome notification.
+  - `onArtworkWritten`: Manages artist-specific `artworkCount` dynamically, generates search keywords, and notifies followers.
+  - `onOrderCreated`: Processes buyer notifications and alerts sellers of new purchases.
+  - `verifyArtist`: Secure admin-only HTTPS callable function to process and status-update artisan applications.
+  - `moderateArtwork`: Secure admin-only HTTPS callable function for artwork reporting and removals.

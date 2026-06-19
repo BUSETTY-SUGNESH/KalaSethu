@@ -119,7 +119,7 @@ export async function addComment(
     authorAvatarUrl,
     content,
     likeCount: 0,
-    parentCommentId,
+    parentCommentId: parentCommentId ?? null,
     replyCount: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

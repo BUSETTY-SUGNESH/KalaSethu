@@ -6,8 +6,9 @@ import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useUIStore } from "@/lib/stores/ui-store";
-import { createArtwork } from "@/lib/services/artwork-service";
-import { uploadMultipleFiles } from "@/lib/firebase/storage";
+import { createArtwork, deleteArtwork, publishArtwork, updateArtwork } from "@/lib/services/artwork-service";
+import { uploadMultipleFiles, validateImageFile } from "@/lib/firebase/storage";
+import type { ArtworkImage } from "@/app/types";
 
 export default function ArtworkUploadPage() {
   const router = useRouter();
@@ -31,7 +32,16 @@ export default function ArtworkUploadPage() {
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
-      setFiles((prev) => [...prev, ...newFiles].slice(0, 5)); // Max 5 images
+      const validFiles: File[] = [];
+      for (const file of newFiles) {
+        const validationError = validateImageFile(file);
+        if (validationError) {
+          addToast({ type: "error", title: "Invalid Image", message: `${file.name}: ${validationError}` });
+        } else {
+          validFiles.push(file);
+        }
+      }
+      setFiles((prev) => [...prev, ...validFiles].slice(0, 5)); // Max 5 images
     }
   }
 
@@ -60,9 +70,10 @@ export default function ArtworkUploadPage() {
     
     setIsSubmitting(true);
     
+    let newArtwork: string | null = null;
+
     try {
-      // Create empty artwork to get ID
-      const newArtwork = await createArtwork(
+      newArtwork = await createArtwork(
         user.id,
         user.displayName,
         user.isVerified || false,
@@ -81,21 +92,34 @@ export default function ArtworkUploadPage() {
         []
       );
       
-      // Upload images
       const uploadedImages = await uploadMultipleFiles(files, `artworks/${newArtwork}`);
-      
-      // We'd typically update the artwork with the image URLs here using another service call
-      // For this simplified version, let's just assume the service can update it
-      
+      const images: ArtworkImage[] = uploadedImages.map((image, index) => ({
+        id: image.fileName,
+        url: image.downloadURL,
+        thumbnailUrl: image.downloadURL,
+        storagePath: image.fullPath,
+        isPrimary: index === 0,
+        order: index,
+      }));
+
+      await updateArtwork(newArtwork, {
+        images,
+        thumbnailUrl: images[0]?.url || "",
+      });
+      await publishArtwork(newArtwork);
+
       addToast({ 
         type: "success", 
-        title: "Artwork Saved", 
-        message: "Your artwork has been saved as a draft." 
+        title: "Artwork Published", 
+        message: "Your artwork is now visible in your portfolio and marketplace." 
       });
       
       router.push("/dashboard/artist");
     } catch (error) {
       console.error("Upload error", error);
+      if (newArtwork) {
+        await deleteArtwork(newArtwork).catch(console.error);
+      }
       addToast({ 
         type: "error", 
         title: "Upload Failed", 
@@ -255,7 +279,7 @@ export default function ArtworkUploadPage() {
               <Icon name="cloud_upload" size={48} className="text-primary mb-16" />
               <p className="text-body-md text-on-surface-variant">
                 Click to upload or drag and drop images<br/>
-                <span className="text-caption">JPG, PNG, WEBP (Max 5MB each)</span>
+                <span className="text-caption">JPG, PNG, WEBP, AVIF (Max 10MB each)</span>
               </p>
               <input 
                 type="file" 
@@ -319,7 +343,7 @@ export default function ArtworkUploadPage() {
 
           <div className="flex flex-col gap-16">
             <Button variant="primary" size="lg" fullWidth type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving..." : "Save as Draft"}
+              {isSubmitting ? "Publishing..." : "Publish Artwork"}
             </Button>
             <Button variant="outline" size="lg" fullWidth type="button" onClick={() => router.back()}>
               Cancel

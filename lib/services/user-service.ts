@@ -3,7 +3,7 @@
 // Business logic layer bridging UI to Repository layer.
 // ============================================================
 import { userRepository } from '@/lib/repositories';
-import type { User, UserProfile, UserRole, PaginatedResult } from '@/app/types';
+import type { User, UserProfile, UserRole, UserAddress, PaginatedResult } from '@/app/types';
 import type { DocumentSnapshot } from '@/lib/firebase/firestore';
 
 // --- Create User Profile (called after Firebase Auth signup) ---
@@ -66,7 +66,7 @@ export async function updateLastLogin(uid: string): Promise<void> {
 export async function searchUsers(
   searchTerm: string,
   maxResults: number = 20
-): Promise<UserProfile[]> {
+): Promise<User[]> {
   return userRepository.searchByName(searchTerm, maxResults);
 }
 
@@ -87,4 +87,42 @@ export async function getFeaturedArtists(count: number = 10): Promise<UserProfil
 // --- Check if User Exists ---
 export async function userExists(uid: string): Promise<boolean> {
   return userRepository.exists(uid);
+}
+
+// --- Get All Users (Admin) ---
+export async function getAllUsers(
+  pageSize: number = 20,
+  lastDoc?: DocumentSnapshot | null
+): Promise<PaginatedResult<User>> {
+  return userRepository.findAll(pageSize, lastDoc);
+}
+
+// --- Set User Banned Status (Admin) ---
+export async function setUserBannedStatus(uid: string, isBanned: boolean): Promise<void> {
+  return userRepository.setBannedStatus(uid, isBanned);
+}
+
+// --- Get Saved Addresses ---
+export async function getUserAddresses(userId: string): Promise<UserAddress[]> {
+  return userRepository.getAddresses(userId);
+}
+
+// --- Create Saved Address ---
+export async function createUserAddress(userId: string, address: Omit<UserAddress, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  return userRepository.createAddress(userId, address);
+}
+
+// --- Update Saved Address ---
+export async function updateUserAddress(userId: string, addressId: string, address: Partial<UserAddress>): Promise<void> {
+  return userRepository.updateAddress(userId, addressId, address);
+}
+
+// --- Delete Saved Address ---
+export async function deleteUserAddress(userId: string, addressId: string): Promise<void> {
+  return userRepository.deleteAddress(userId, addressId);
+}
+
+// --- Set Default Address ---
+export async function setDefaultAddress(userId: string, addressId: string): Promise<void> {
+  return userRepository.setDefaultAddress(userId, addressId);
 }

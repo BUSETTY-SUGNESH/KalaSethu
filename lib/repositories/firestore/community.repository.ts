@@ -112,7 +112,7 @@ export const communityRepository = {
   async getComments(postId: string, pageSize: number = 50): Promise<Comment[]> {
     const q = query(
       subcollections.postComments(postId),
-      where('parentCommentId', '==', undefined),
+      where('parentCommentId', '==', null),
       orderBy('createdAt', 'asc'),
       limit(pageSize)
     );
@@ -140,7 +140,6 @@ export const communityRepository = {
     data: Omit<Comment, 'id'>
   ): Promise<string> {
     const ref = await addDoc(subcollections.postComments(postId), data);
-    await updateDoc(docRef.post(postId), { commentCount: increment(1) });
     if (data.parentCommentId) {
       const parentRef = doc(subcollections.postComments(postId), data.parentCommentId);
       await updateDoc(parentRef, { replyCount: increment(1) });

@@ -50,7 +50,7 @@ export async function getArtwork(artworkId: string): Promise<Artwork | null> {
 // --- Update Artwork ---
 export async function updateArtwork(
   artworkId: string,
-  data: Partial<ArtworkFormData> & { images?: ArtworkImage[] }
+  data: Partial<Artwork>
 ): Promise<void> {
   return artworkRepository.update(artworkId, data);
 }

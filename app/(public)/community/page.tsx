@@ -69,10 +69,10 @@ export default function CommunityPage() {
           <div className="flex flex-col gap-32">
             {/* Filter Tabs */}
             <div className="flex gap-24 border-b border-outline-variant" style={{ borderBottom: "1px solid rgba(196, 199, 199, 0.2)", paddingBottom: 16 }}>
-              <button className="text-label-md text-primary" style={{ paddingBottom: 14, borderBottom: "2px solid var(--color-primary)", marginBottom: -17 }}>Latest</button>
-              <button className="text-label-md text-on-surface-variant">Trending</button>
-              <button className="text-label-md text-on-surface-variant">Techniques</button>
-              <button className="text-label-md text-on-surface-variant">Provenance</button>
+              <button className="text-label-md text-primary" style={{ paddingBottom: 14, borderBottom: "2px solid var(--color-primary)", marginBottom: -17 }} suppressHydrationWarning>Latest</button>
+              <button className="text-label-md text-on-surface-variant" suppressHydrationWarning>Trending</button>
+              <button className="text-label-md text-on-surface-variant" suppressHydrationWarning>Techniques</button>
+              <button className="text-label-md text-on-surface-variant" suppressHydrationWarning>Provenance</button>
             </div>
 
             {/* Threads */}

@@ -43,10 +43,9 @@ export function subscribeToNotifications(
   userId: string,
   callback: (notifications: Notification[]) => void
 ): Unsubscribe {
-  const { query, where, orderBy, limit, onSnapshot, collections } = require('@/lib/firebase/firestore');
+  const { query, orderBy, limit, onSnapshot, subcollections } = require('@/lib/firebase/firestore');
   const q = query(
-    collections.notifications(),
-    where('userId', '==', userId),
+    subcollections.userNotifications(userId),
     orderBy('createdAt', 'desc'),
     limit(30)
   );
@@ -66,9 +65,10 @@ export async function getUnreadCount(userId: string): Promise<number> {
 
 // --- Mark as Read ---
 export async function markNotificationAsRead(
+  userId: string,
   notificationId: string
 ): Promise<void> {
-  return notificationRepository.markRead(notificationId);
+  return notificationRepository.markRead(userId, notificationId);
 }
 
 // --- Mark All as Read ---

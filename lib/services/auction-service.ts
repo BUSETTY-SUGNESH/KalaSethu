@@ -10,7 +10,7 @@ import type {
   Bid,
   PaginatedResult,
 } from '@/app/types';
-import type { DocumentSnapshot, Unsubscribe } from '@/lib/firebase/firestore';
+import { type DocumentSnapshot, type Unsubscribe, subcollections, addDoc } from '@/lib/firebase/firestore';
 
 // --- Create Auction ---
 export async function createAuction(
@@ -139,8 +139,18 @@ export async function updateAuctionStatus(
   return auctionRepository.setStatus(auctionId, status);
 }
 
-// --- Place Bid (Mock for now) ---
-export async function placeBid(data: any): Promise<void> {
-  console.log("Mock placeBid", data);
-  return Promise.resolve();
+// --- Place Bid ---
+export async function placeBid(data: {
+  auctionId: string;
+  bidderId: string;
+  bidderName: string;
+  amount: number;
+}): Promise<void> {
+  const bidsRef = subcollections.auctionBids(data.auctionId);
+  await addDoc(bidsRef, {
+    bidderId: data.bidderId,
+    bidderName: data.bidderName,
+    amount: data.amount,
+    timestamp: new Date().toISOString(),
+  });
 }

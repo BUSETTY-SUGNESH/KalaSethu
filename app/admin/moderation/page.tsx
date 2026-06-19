@@ -3,19 +3,60 @@
 import { useState, useEffect } from "react";
 import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
-
-// Mock data since we haven't implemented the moderation service fully
-const mockReportedItems = [
-  { id: '1', type: 'artwork', title: 'Suspicious Antiquity Listing', reportedBy: 'User123', date: '2024-01-15', status: 'pending' },
-  { id: '2', type: 'comment', title: 'Inappropriate language in CharchaSabha', reportedBy: 'Mod4', date: '2024-01-14', status: 'pending' },
-  { id: '3', type: 'user', title: 'Fake Artist Profile', reportedBy: 'User890', date: '2024-01-12', status: 'resolved' },
-];
+import { getPendingReports, resolveReport, moderateArtwork } from "@/lib/services/admin-service";
+import type { Report } from "@/app/types";
+import { useAuthStore } from "@/lib/stores/auth-store";
+import { useUIStore } from "@/lib/stores/ui-store";
 
 export default function ModerationPage() {
-  const [items, setItems] = useState(mockReportedItems);
+  const [items, setItems] = useState<Report[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuthStore();
+  const { addToast } = useUIStore();
 
-  function handleAction(id: string, action: 'approve' | 'remove') {
-    setItems(items.map(item => item.id === id ? { ...item, status: action === 'approve' ? 'resolved' : 'removed' } : item));
+  useEffect(() => {
+    loadReports();
+  }, []);
+
+  async function loadReports() {
+    setIsLoading(true);
+    try {
+      const res = await getPendingReports(50);
+      setItems(res.data || []);
+    } catch (error) {
+      console.error("Failed to load reports", error);
+      addToast({ type: 'error', title: 'Error', message: 'Could not load pending reports.' });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleAction(reportId: string, targetId: string, targetType: string, action: 'approve' | 'remove') {
+    if (!user) {
+      addToast({ type: 'error', title: 'Error', message: 'Authentication required.' });
+      return;
+    }
+
+    try {
+      if (action === 'approve') {
+        // Dismiss the report
+        await resolveReport(reportId, user.id, 'dismissed', 'Content reviewed and dismissed.', 'dismissed');
+        addToast({ type: 'success', title: 'Report Dismissed', message: 'The report was successfully dismissed.' });
+      } else {
+        // Remove / Resolve
+        if (targetType === 'artwork') {
+          // Reject artwork first (via cloud function)
+          await moderateArtwork(targetId, 'reject', 'Content flagged and removed by administration.');
+        }
+        await resolveReport(reportId, user.id, 'resolved', 'Content flagged and removed.', `content_removed_${targetType}`);
+        addToast({ type: 'success', title: 'Content Removed', message: 'The content was removed and the report resolved.' });
+      }
+      
+      setItems(items.filter(item => item.id !== reportId));
+    } catch (error: any) {
+      console.error("Moderation action error", error);
+      addToast({ type: 'error', title: 'Error', message: error.message || 'Action failed.' });
+    }
   }
 
   return (
@@ -27,50 +68,66 @@ export default function ModerationPage() {
         </div>
       </div>
 
-      <div className="bg-surface-container-lowest rounded-lg border border-outline-variant overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-surface-container-low border-b border-outline-variant">
-              <th className="p-16 text-label-sm uppercase text-on-surface-variant">Type</th>
-              <th className="p-16 text-label-sm uppercase text-on-surface-variant">Issue / Title</th>
-              <th className="p-16 text-label-sm uppercase text-on-surface-variant">Reported By</th>
-              <th className="p-16 text-label-sm uppercase text-on-surface-variant">Date</th>
-              <th className="p-16 text-label-sm uppercase text-on-surface-variant">Status</th>
-              <th className="p-16 text-label-sm uppercase text-on-surface-variant">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map(item => (
-              <tr key={item.id} className="border-b border-outline-variant hover:bg-surface-container-lowest transition-colors">
-                <td className="p-16 capitalize">
-                  <span className={`px-2 py-1 rounded text-caption ${
-                    item.type === 'artwork' ? 'bg-primary text-white' : 
-                    item.type === 'comment' ? 'bg-accent-terracotta text-white' : 'bg-surface-container-high'
-                  }`}>
-                    {item.type}
-                  </span>
-                </td>
-                <td className="p-16 font-bold text-primary">{item.title}</td>
-                <td className="p-16 text-on-surface-variant">{item.reportedBy}</td>
-                <td className="p-16 text-on-surface-variant">{item.date}</td>
-                <td className="p-16">
-                  <span className={`status-pill ${item.status}`}>
-                    {item.status}
-                  </span>
-                </td>
-                <td className="p-16">
-                  {item.status === 'pending' && (
-                    <div className="flex gap-8">
-                      <Button variant="outline" size="sm" onClick={() => handleAction(item.id, 'approve')}>Dismiss</Button>
-                      <Button variant="primary" size="sm" onClick={() => handleAction(item.id, 'remove')}>Remove</Button>
-                    </div>
-                  )}
-                </td>
+      {isLoading ? (
+        <div className="flex flex-col gap-16">
+          {[1, 2].map(i => (
+            <div key={i} className="skeleton" style={{ height: 64, borderRadius: 8 }} />
+          ))}
+        </div>
+      ) : (
+        <div className="bg-surface-container-lowest rounded-lg border border-outline-variant overflow-hidden">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-surface-container-low border-b border-outline-variant">
+                <th className="p-16 text-label-sm uppercase text-on-surface-variant">Type</th>
+                <th className="p-16 text-label-sm uppercase text-on-surface-variant">Reason / Issue</th>
+                <th className="p-16 text-label-sm uppercase text-on-surface-variant">Details</th>
+                <th className="p-16 text-label-sm uppercase text-on-surface-variant">Reported By</th>
+                <th className="p-16 text-label-sm uppercase text-on-surface-variant">Severity</th>
+                <th className="p-16 text-label-sm uppercase text-on-surface-variant text-right">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {items.length > 0 ? (
+                items.map(item => (
+                  <tr key={item.id} className="border-b border-outline-variant hover:bg-surface-container-low/20 transition-colors">
+                    <td className="p-16 capitalize">
+                      <span className={`px-8 py-4 rounded text-caption font-bold ${
+                        item.targetType === 'artwork' ? 'bg-primary text-white' : 
+                        item.targetType === 'comment' ? 'bg-accent-terracotta text-white' : 'bg-surface-container-high'
+                      }`} style={{ borderRadius: 4 }}>
+                        {item.targetType}
+                      </span>
+                    </td>
+                    <td className="p-16 font-bold text-primary">{item.reason}</td>
+                    <td className="p-16 text-on-surface-variant">{item.description}</td>
+                    <td className="p-16 text-caption text-on-surface-variant">ID: {item.reporterId.substring(0, 8)}...</td>
+                    <td className="p-16 capitalize">
+                      <span className={`status-pill ${item.severity === 'high' ? 'cancelled' : item.severity === 'medium' ? 'pending' : 'completed'}`}>
+                        {item.severity}
+                      </span>
+                    </td>
+                    <td className="p-16 text-right">
+                      {item.status === 'pending' && (
+                        <div className="flex gap-8 justify-end">
+                          <Button variant="outline" size="sm" onClick={() => handleAction(item.id, item.targetId, item.targetType, 'approve')}>Dismiss</Button>
+                          <Button variant="primary" size="sm" onClick={() => handleAction(item.id, item.targetId, item.targetType, 'remove')}>Remove</Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="p-32 text-center text-body-md text-on-surface-variant italic">
+                    No pending moderation reports found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

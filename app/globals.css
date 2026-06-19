@@ -4,6 +4,10 @@
 
 /* --- Design Tokens --- */
 :root {
+  /* Typography */
+  --font-playfair: Georgia, 'Times New Roman', serif;
+  --font-manrope: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
   /* Colors — Core */
   --color-primary: #000000;
   --color-ink-charcoal: #121212;
@@ -1599,4 +1603,3 @@ h1, h2, h3, h4 { font-family: var(--font-playfair), 'Playfair Display', serif; }
   .grid-3 { grid-template-columns: 1fr 1fr; }
   .grid-4 { grid-template-columns: 1fr 1fr; }
 }
-

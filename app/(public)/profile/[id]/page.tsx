@@ -8,7 +8,7 @@ import Button from "@/app/components/ui/Button";
 import ArtworkCard from "@/app/components/cards/ArtworkCard";
 import { getUserProfile } from "@/lib/services/user-service";
 import { followUser, unfollowUser, isFollowing as checkIsFollowing } from "@/lib/services/community-service";
-import { getPublishedArtworks } from "@/lib/services/artwork-service";
+import { getPublishedArtworks, getArtworksByArtist } from "@/lib/services/artwork-service";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import type { User, Artwork } from "@/app/types";
 
@@ -35,10 +35,8 @@ export default function PublicProfilePage() {
         
         // If it's an artist, load their artworks
         if (data && (data.role === 'artist' || data.role === 'verified_artist' || data.role === 'admin')) {
-          // This would ideally be a specific call to get an artist's artworks, but we can reuse getPublishedArtworks and filter
-          // For a real app, you'd add a getArtworksByArtist function
-          const allArtworks = await getPublishedArtworks(20);
-          setArtworks(allArtworks.data.filter((a: Artwork) => a.artistId === profileId));
+          const artistArtworks = await getArtworksByArtist(profileId);
+          setArtworks(artistArtworks.data);
         }
 
         // Check if current user is following this profile

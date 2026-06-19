@@ -190,7 +190,7 @@ function MessagesContent() {
           <div style={{ padding: 24, borderBottom: "1px solid rgba(196, 199, 199, 0.2)" }}>
             <div className="header-search" style={{ margin: 0, width: "100%" }}>
               <Icon name="search" size={20} className="text-on-surface-variant" />
-              <input type="text" placeholder="Search messages..." />
+              <input type="text" placeholder="Search messages..." suppressHydrationWarning />
             </div>
           </div>
           

@@ -3,6 +3,9 @@
 // ============================================================
 import {
   collections,
+  subcollections,
+  db,
+  collectionGroup,
   docRef,
   getDoc,
   getDocs,
@@ -91,8 +94,7 @@ export const auctionRepository = {
 
   async findBidsByAuction(auctionId: string, max: number = 50): Promise<Bid[]> {
     const q = query(
-      collections.bids(),
-      where('auctionId', '==', auctionId),
+      subcollections.auctionBids(auctionId),
       orderBy('amount', 'desc'),
       limit(max)
     );
@@ -102,8 +104,7 @@ export const auctionRepository = {
 
   subscribeToBids(auctionId: string, cb: (bids: Bid[]) => void): Unsubscribe {
     const q = query(
-      collections.bids(),
-      where('auctionId', '==', auctionId),
+      subcollections.auctionBids(auctionId),
       orderBy('amount', 'desc'),
       limit(20)
     );
@@ -118,7 +119,7 @@ export const auctionRepository = {
     lastDoc?: DocumentSnapshot | null
   ): Promise<PaginatedResult<Bid>> {
     return paginatedQuery<Bid>(
-      collections.bids(),
+      collectionGroup(db, 'bids') as any,
       [where('bidderId', '==', userId), orderBy('timestamp', 'desc')],
       pageSize,
       lastDoc

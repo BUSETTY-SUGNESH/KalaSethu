@@ -49,7 +49,7 @@ exports.onOrderCreated = functions.firestore
             message: `Your order #${orderId} has been confirmed.`,
             type: "order_update",
             isRead: false,
-            link: `/dashboard/orders/${orderId}`
+            actionUrl: `/dashboard/orders/${orderId}`
         });
         // Notify sellers (extract artistIds from items)
         const sellerIds = new Set(orderData.items.map((item) => item.artistId));
@@ -60,7 +60,7 @@ exports.onOrderCreated = functions.firestore
                 message: `Congratulations! You have a new sale from order #${orderId}.`,
                 type: "system",
                 isRead: false,
-                link: `/dashboard/artist/orders`
+                actionUrl: `/dashboard/artist/orders`
             });
         }
         await batch.commit();

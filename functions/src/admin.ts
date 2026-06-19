@@ -12,23 +12,48 @@ export const verifyArtist = functions.https.onCall(async (data, context) => {
   // Verify admin status
   const userDoc = await db.collection("users").doc(context.auth.uid).get();
   const userData = userDoc.data();
-  if (userData?.role !== 'admin') {
-    throw new functions.https.HttpsError('permission-denied', 'Must be an admin');
+  if (userData?.role !== 'admin' && userData?.role !== 'moderator') {
+    throw new functions.https.HttpsError('permission-denied', 'Must be an admin or moderator');
   }
 
-  const { targetUserId, isVerified } = data;
+  const { targetUserId, isVerified, verificationId } = data;
   if (!targetUserId) {
     throw new functions.https.HttpsError('invalid-argument', 'Target User ID is required');
   }
 
   try {
     const role = isVerified ? 'verified_artist' : 'artist';
+    const status = isVerified ? 'approved' : 'rejected';
     
     await db.collection("users").doc(targetUserId).update({
       role,
       isVerified,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
+
+    // Update the verification application document status
+    if (verificationId) {
+      await db.collection("artistVerifications").doc(verificationId).update({
+        status,
+        reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        reviewNotes: isVerified ? "Approved via admin console." : "Rejected via admin console."
+      });
+    } else {
+      const verifSnap = await db.collection("artistVerifications")
+        .where("artistId", "==", targetUserId)
+        .where("status", "==", "pending")
+        .limit(1)
+        .get();
+      if (!verifSnap.empty) {
+        await verifSnap.docs[0].ref.update({
+          status,
+          reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          reviewNotes: isVerified ? "Approved via admin console." : "Rejected via admin console."
+        });
+      }
+    }
 
     // Notify the user
     await db.collection("users").doc(targetUserId).collection("notifications").add({
