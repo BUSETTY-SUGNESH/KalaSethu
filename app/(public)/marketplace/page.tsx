@@ -1,14 +1,17 @@
 'use client';
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import Icon from "@/app/components/ui/Icon";
 import SectionHeader from "@/app/components/ui/SectionHeader";
 import ArtworkCard from "@/app/components/cards/ArtworkCard";
 import { getPublishedArtworks } from "@/lib/services/artwork-service";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import type { Artwork } from "@/app/types";
 import type { DocumentSnapshot } from "firebase/firestore";
 
 export default function MarketplacePage() {
+  const { isArtist } = useAuthStore();
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null);
@@ -62,9 +65,15 @@ export default function MarketplacePage() {
                 <Icon name="filter_list" size={18} />
                 Filters
               </button>
-              <button className="btn btn-primary">
+              <button className="btn btn-outline">
                 Sort: Newest <Icon name="expand_more" size={18} />
               </button>
+              {isArtist() && (
+                <Link href="/dashboard/artist" className="btn btn-primary">
+                  <Icon name="add" size={18} />
+                  List Artwork
+                </Link>
+              )}
             </div>
           </div>
         </div>
