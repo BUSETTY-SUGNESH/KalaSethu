@@ -1,0 +1,64 @@
+version: "2"
+type: frontend
+tech_stack:
+  - TypeScript
+  - Next.js (App Router)
+  - React
+  - Tailwind CSS
+  - Firebase (Auth, Firestore, Storage)
+  - Zustand
+  - Zod
+routes:
+  - path: /login
+    file: app/(auth)/login/page.tsx
+    auth_required: false
+    description: User login page
+  - path: /signup
+    file: app/(auth)/signup/page.tsx
+    auth_required: false
+    description: User registration page
+  - path: /
+    file: app/(public)/page.tsx
+    auth_required: false
+    description: Landing page
+  - path: /marketplace
+    file: app/(public)/marketplace/page.tsx
+    auth_required: false
+    description: Marketplace page
+  - path: /dashboard
+    file: app/dashboard/page.tsx
+    auth_required: true
+    description: User dashboard
+  - path: /admin
+    file: app/admin/page.tsx
+    auth_required: true
+    description: Admin dashboard
+features:
+  - name: User Authentication
+    description: Login and signup via Firebase Auth
+    files:
+      - app/(auth)/login/page.tsx
+      - app/(auth)/signup/page.tsx
+    entry_route: /login
+    user_interactions:
+      - Fill email input field
+      - Fill password input field
+      - Click Login or Signup button
+      - See error message on invalid credentials
+    api_calls:
+      - method: POST
+        endpoint: Firebase Auth API
+    auth_required: false
+  - name: Marketplace Browsing
+    description: Browse and view artworks
+    files:
+      - app/(public)/marketplace/page.tsx
+    entry_route: /marketplace
+    user_interactions:
+      - Scroll through artwork list
+      - Click on an artwork to view details
+    api_calls:
+      - method: GET
+        endpoint: Firestore /artworks
+    auth_required: false
+known_limitations: []

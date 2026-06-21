@@ -1,0 +1,308 @@
+[
+  {
+    "id": "TC001",
+    "title": "Sign in successfully and reach the dashboard",
+    "description": "A returning user can sign in with valid credentials and reach the protected dashboard.",
+    "category": "User Authentication",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the dashboard is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify protected access is enabled"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC002",
+    "title": "Create a new account and gain authenticated access",
+    "description": "A new user can complete signup with valid credentials and reach authenticated access afterward.",
+    "category": "User Authentication",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /signup"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the signup form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify authenticated access is enabled"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC003",
+    "title": "Block direct access to the dashboard when not signed in",
+    "description": "A visitor who is not authenticated cannot directly access the dashboard page.",
+    "category": "User Authentication",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /dashboard"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify access is blocked or redirected to authentication"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the dashboard content is not displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC004",
+    "title": "Allow authenticated users to open the dashboard directly",
+    "description": "A signed-in user can access the dashboard page without being blocked.",
+    "category": "User Authentication",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to open the dashboard"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the dashboard is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify protected access remains enabled"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC005",
+    "title": "Show the admin area only for authorized access",
+    "description": "A user with admin access can open the admin dashboard while unauthorized access is prevented for non-admin visitors.",
+    "category": "User Authentication",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to open the admin area"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the admin dashboard is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify protected access remains enabled"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC006",
+    "title": "Browse the public marketplace and open an artwork detail view",
+    "description": "A visitor can load the marketplace, scroll through artworks, and open one artwork to view its details.",
+    "category": "Marketplace Browsing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /marketplace"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify artwork listings are displayed"
+      },
+      {
+        "type": "action",
+        "description": "Scroll through the artwork list"
+      },
+      {
+        "type": "action",
+        "description": "Click an artwork to view details"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the artwork detail view is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC007",
+    "title": "Show a clear error for invalid login credentials",
+    "description": "A user entering invalid credentials sees an error message and does not gain authenticated access.",
+    "category": "User Authentication",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with invalid@example.com"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with an invalid password"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a login error message is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify protected access is not enabled"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC008",
+    "title": "Access the marketplace from the landing page",
+    "description": "A visitor can start on the landing page and reach the marketplace discovery area successfully.",
+    "category": "Marketplace Browsing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to view the marketplace"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the marketplace page is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify artwork listings are displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC009",
+    "title": "Validate required fields on signup",
+    "description": "A user sees validation feedback when trying to submit the signup form without required information.",
+    "category": "User Authentication",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /signup"
+      },
+      {
+        "type": "action",
+        "description": "Submit the signup form without entering credentials"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify validation errors are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the account is not created"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC010",
+    "title": "Handle repeated login submission safely",
+    "description": "A user can submit the login form more than once without breaking the sign-in flow or creating duplicate access state.",
+    "category": "User Authentication",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form again"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the dashboard is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify authenticated access is enabled"
+      }
+    ],
+    "priority": "Low"
+  }
+]

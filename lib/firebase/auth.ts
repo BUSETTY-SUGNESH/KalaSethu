@@ -58,13 +58,20 @@ export async function signInWithGoogle(): Promise<UserCredential> {
 // --- Phone OTP ---
 let recaptchaVerifier: RecaptchaVerifier | null = null;
 
-export function initRecaptcha(containerId: string): RecaptchaVerifier {
-  if (recaptchaVerifier) {
-    recaptchaVerifier.clear();
+export function initRecaptcha(): RecaptchaVerifier {
+  if (typeof window === 'undefined') return null as any;
+  if (!recaptchaVerifier) {
+    let container = document.getElementById('global-recaptcha-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'global-recaptcha-container';
+      document.body.appendChild(container);
+    }
+    recaptchaVerifier = new RecaptchaVerifier(auth, container, {
+      size: 'invisible',
+    });
+    recaptchaVerifier.render().catch(console.error);
   }
-  recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
-    size: 'invisible',
-  });
   return recaptchaVerifier;
 }
 

@@ -110,9 +110,9 @@ export async function getFeaturedArtworks(count: number = 10): Promise<Artwork[]
 // --- Search Artworks ---
 export async function searchArtworks(
   searchTerm: string,
-  maxResults: number = 20
+  maxResults: number = 30
 ): Promise<Artwork[]> {
-  return artworkRepository.searchByTitle(searchTerm, maxResults);
+  return artworkRepository.searchArtworks(searchTerm, maxResults);
 }
 
 // --- Increment View Count ---

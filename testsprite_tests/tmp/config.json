@@ -1,0 +1,19 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:3000",
+  "loginUser": "Haryx",
+  "loginPassword": "12345678",
+  "executionArgs": {
+    "projectName": "KalaSethu",
+    "projectPath": "c:\\Users\\Bhyresh BS\\Documents\\Bhyresh\\Programs\\KalaSethu",
+    "testIds": [],
+    "additionalInstruction": "",
+    "serverMode": "development",
+    "envs": {
+      "API_KEY": "sk-user-YG_bYLgSKv-Dldh12DmcYN4EhIp5XNnhk5seMu7OB7H57D8FWZDN1xpHY8bKA-QvyjJAiVVVjGxAjQ5QzxEzf_2X2JRLG70G-L6VwvUPN2WCA_dxguCMXomIn8iG6NCoXvA"
+    }
+  },
+  "serverPort": 56014
+}

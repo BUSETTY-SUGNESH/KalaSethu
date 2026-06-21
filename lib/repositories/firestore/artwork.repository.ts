@@ -135,15 +135,56 @@ export const artworkRepository = {
     );
   },
 
-  async searchByTitle(term: string, max: number = 20): Promise<Artwork[]> {
-    const q = query(
+  async searchArtworks(term: string, max: number = 30): Promise<Artwork[]> {
+    if (!term) return [];
+    
+    // Capitalize the term to match Title Case typically used in KalaSetu
+    const formattedTerm = term.split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+
+    // Query 1: Title Prefix
+    const qTitle = query(
       collections.artworks(),
       where('status', '==', 'published'),
-      where('title', '>=', term),
-      where('title', '<=', term + '\uf8ff'),
+      where('title', '>=', formattedTerm),
+      where('title', '<=', formattedTerm + '\uf8ff'),
       limit(max)
     );
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }) as Artwork);
+
+    // Query 2: Artist Name Prefix
+    const qArtist = query(
+      collections.artworks(),
+      where('status', '==', 'published'),
+      where('artistName', '>=', formattedTerm),
+      where('artistName', '<=', formattedTerm + '\uf8ff'),
+      limit(max)
+    );
+
+    // Query 3: Category Exact Match
+    const qCategory = query(
+      collections.artworks(),
+      where('status', '==', 'published'),
+      where('category', '==', formattedTerm),
+      limit(max)
+    );
+
+    // Execute in parallel
+    const [titleSnap, artistSnap, categorySnap] = await Promise.all([
+      getDocs(qTitle),
+      getDocs(qArtist),
+      getDocs(qCategory),
+    ]);
+
+    // Merge and deduplicate by ID
+    const resultsMap = new Map<string, Artwork>();
+    
+    [...titleSnap.docs, ...artistSnap.docs, ...categorySnap.docs].forEach(d => {
+      if (!resultsMap.has(d.id)) {
+        resultsMap.set(d.id, { id: d.id, ...d.data() } as Artwork);
+      }
+    });
+
+    return Array.from(resultsMap.values()).slice(0, max);
   },
 };

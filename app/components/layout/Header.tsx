@@ -24,7 +24,14 @@ export default function Header() {
   
   const { user, isAuthenticated, isArtist } = useAuthStore();
   const { itemCount } = useCartStore();
-  const { unreadNotificationCount, isNotificationPanelOpen, toggleNotificationPanel, setNotificationPanelOpen } = useUIStore();
+  const { 
+    unreadNotificationCount, 
+    isNotificationPanelOpen, 
+    toggleNotificationPanel, 
+    setNotificationPanelOpen,
+    searchQuery,
+    setSearchQuery 
+  } = useUIStore();
   
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -77,7 +84,18 @@ export default function Header() {
             >
               search
             </span>
-            <input type="text" placeholder="Search heritage..." suppressHydrationWarning />
+            <input 
+              type="text" 
+              placeholder="Search heritage..." 
+              suppressHydrationWarning 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && pathname !== '/marketplace') {
+                  router.push('/marketplace');
+                }
+              }}
+            />
           </div>
 
           {isAuthenticated ? (

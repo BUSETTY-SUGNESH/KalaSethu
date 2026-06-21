@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Button from '@/app/components/ui/Button';
@@ -63,13 +63,20 @@ export default function LoginPage() {
     }
   }
 
+  useEffect(() => {
+    // Pre-load the invisible reCAPTCHA so it's fully ready before the user clicks SEND OTP
+    initRecaptcha();
+  }, []);
+
   async function handlePhoneLogin() {
     setError('');
     setIsLoading(true);
 
     try {
-      const verifier = initRecaptcha('recaptcha-container');
-      const result = await signInWithPhone(phone.startsWith('+') ? phone : `+91${phone}`, verifier);
+      const verifier = initRecaptcha();
+      const cleanPhone = phone.replace(/[\s\-()]/g, '');
+      const finalPhone = cleanPhone.startsWith('+') ? cleanPhone : `+91${cleanPhone}`;
+      const result = await signInWithPhone(finalPhone, verifier);
       setConfirmationResult(result);
       addToast({ type: 'info', title: 'OTP Sent', message: 'Check your phone for the verification code.' });
     } catch (err: unknown) {
@@ -77,7 +84,7 @@ export default function LoginPage() {
       if (message.includes('invalid-phone-number')) {
         setError('Invalid phone number. Please include country code.');
       } else {
-        setError('Failed to send OTP. Please try again.');
+        setError(`Failed to send OTP: ${message}`);
       }
     } finally {
       setIsLoading(false);
@@ -283,7 +290,7 @@ export default function LoginPage() {
         </div>
       )}
 
-      <div id="recaptcha-container" />
+
 
       <p
         className="text-center text-body-md text-on-surface-variant"

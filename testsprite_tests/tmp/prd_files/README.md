@@ -16,10 +16,6 @@ It is built with **Next.js**, **Zustand**, and **Firebase** (Firestore, Auth, St
 * **Verification System**: Rigorous application flow for artisans to get verified.
 * **Cloud Functions**: Robust backend for order processing, notifications, moderation, and aggregation.
 
-## Recent Optimizations
-* **Premium UI**: Dark-themed, dropdown-based filtering and sorting controls that provide a seamless user experience.
-* **Image Optimization**: Automated conversion to next-gen formats (WebP), lazy loading, and intelligent responsive sizing via `next/image` ensuring optimal Core Web Vitals and zero layout shifts.
-
 ## Setup Instructions
 
 ### Prerequisites

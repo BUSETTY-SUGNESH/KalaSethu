@@ -25,8 +25,12 @@ interface UIState {
   // Search
   isSearchOpen: boolean;
   searchQuery: string;
+  activeCategory: string | null;
+  sortBy: 'newest' | 'price_low' | 'price_high' | 'popular';
   toggleSearch: () => void;
   setSearchQuery: (query: string) => void;
+  setActiveCategory: (category: string | null) => void;
+  setSortBy: (sort: 'newest' | 'price_low' | 'price_high' | 'popular') => void;
   // Notifications Panel
   isNotificationPanelOpen: boolean;
   toggleNotificationPanel: () => void;
@@ -55,10 +59,15 @@ export const useUIStore = create<UIState>((set) => ({
   setMobileNavOpen: (open) => set({ isMobileNavOpen: open }),
 
   // Search
+  // Search & Filter
   isSearchOpen: false,
   searchQuery: '',
+  activeCategory: null,
+  sortBy: 'newest',
   toggleSearch: () => set((s) => ({ isSearchOpen: !s.isSearchOpen })),
   setSearchQuery: (query) => set({ searchQuery: query }),
+  setActiveCategory: (category) => set({ activeCategory: category }),
+  setSortBy: (sort) => set({ sortBy: sort }),
 
   // Notifications
   isNotificationPanelOpen: false,
