@@ -2,6 +2,7 @@
 // KalaSetu — UI Store (Zustand)
 // ============================================================
 import { create } from 'zustand';
+import type { Artwork } from '@/app/types';
 
 interface Toast {
   id: string;
@@ -48,6 +49,16 @@ interface UIState {
   // Page Loading
   isPageLoading: boolean;
   setPageLoading: (loading: boolean) => void;
+  // Marketplace Cache
+  marketplaceCache: {
+    artworks: Artwork[];
+    lastDoc: unknown;
+    hasMore: boolean;
+    searchResults: Artwork[] | null;
+    scrollY: number;
+  } | null;
+  setMarketplaceCache: (cache: UIState['marketplaceCache']) => void;
+  clearMarketplaceCache: () => void;
 }
 
 let toastCounter = 0;
@@ -99,4 +110,9 @@ export const useUIStore = create<UIState>((set) => ({
   // Page Loading
   isPageLoading: false,
   setPageLoading: (loading) => set({ isPageLoading: loading }),
+
+  // Marketplace Cache
+  marketplaceCache: null,
+  setMarketplaceCache: (cache) => set({ marketplaceCache: cache }),
+  clearMarketplaceCache: () => set({ marketplaceCache: null }),
 }));

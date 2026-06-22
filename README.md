@@ -17,7 +17,9 @@ It is built with **Next.js**, **Zustand**, and **Firebase** (Firestore, Auth, St
 * **Cloud Functions**: Robust backend for order processing, notifications, moderation, and aggregation.
 
 ## Recent Optimizations
-* **Premium UI**: Dark-themed, dropdown-based filtering and sorting controls that provide a seamless user experience.
+* **Premium UX & Navigation**: Introduced a smooth sliding active indicator to the main navigation for a premium feel. Dark-themed, dropdown-based filtering and sorting controls provide a seamless user experience.
+* **Marketplace Enhancements**: Refactored KalaMarket for fully responsive mobile/tablet layouts, implemented Zustand-backed state persistence to retain browse history across page navigations, and added an integrated "Artist Hub" contextual panel for sellers.
+* **Accessibility & Standardization**: Standardized global spacing and layout utilities (removing hardcoded inline styles) and brought the Marketplace into full a11y compliance (semantic category grid, `aria-live` loading states, and `aria-haspopup` dropdowns).
 * **Image Optimization**: Automated conversion to next-gen formats (WebP), lazy loading, and intelligent responsive sizing via `next/image` ensuring optimal Core Web Vitals and zero layout shifts.
 
 ## Setup Instructions

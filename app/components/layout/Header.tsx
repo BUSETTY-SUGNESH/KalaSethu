@@ -36,6 +36,37 @@ export default function Header() {
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const navRefs = useRef<(HTMLAnchorElement | null)[]>([]);
+  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0, opacity: 0 });
+
+  useEffect(() => {
+    function updateIndicator() {
+      const activeIndex = NAV_ITEMS.findIndex(item => pathname === item.href);
+      if (activeIndex !== -1 && navRefs.current[activeIndex]) {
+        const activeEl = navRefs.current[activeIndex];
+        setIndicatorStyle({
+          left: activeEl.offsetLeft,
+          width: activeEl.offsetWidth,
+          opacity: 1
+        });
+      } else {
+        setIndicatorStyle(prev => ({ ...prev, opacity: 0 }));
+      }
+    }
+
+    updateIndicator();
+    
+    // Update on resize to maintain correct position
+    window.addEventListener('resize', updateIndicator);
+    // Add small delay to ensure fonts/layout are loaded
+    const timeout = setTimeout(updateIndicator, 100);
+    
+    return () => {
+      window.removeEventListener('resize', updateIndicator);
+      clearTimeout(timeout);
+    };
+  }, [pathname]);
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -64,15 +95,17 @@ export default function Header() {
             KalaSetu
           </Link>
           <nav className="header-nav">
-            {NAV_ITEMS.map((item) => (
+            {NAV_ITEMS.map((item, index) => (
               <Link
                 key={item.href}
                 href={item.href}
+                ref={(el) => { navRefs.current[index] = el; }}
                 className={pathname === item.href ? "active" : ""}
               >
                 {item.label}
               </Link>
             ))}
+            <div className="nav-indicator" style={indicatorStyle} />
           </nav>
         </div>
 
@@ -87,6 +120,7 @@ export default function Header() {
             <input 
               type="text" 
               placeholder="Search heritage..." 
+              aria-label="Search artworks"
               suppressHydrationWarning 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

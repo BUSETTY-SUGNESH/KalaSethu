@@ -7,7 +7,9 @@ import SectionHeader from "@/app/components/ui/SectionHeader";
 import ArtworkCard from "@/app/components/cards/ArtworkCard";
 import { getPublishedArtworks, searchArtworks } from "@/lib/services/artwork-service";
 import { useUIStore } from "@/lib/stores/ui-store";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import type { Artwork } from "@/app/types";
+import Link from "next/link";
 
 interface MarketplaceClientProps {
   initialArtworks: Artwork[];
@@ -22,25 +24,54 @@ export default function MarketplaceClient({
   initialCursor,
   initialError = null
 }: MarketplaceClientProps) {
-  const [artworks, setArtworks] = useState<Artwork[]>(initialArtworks);
-  const [lastDoc, setLastDoc] = useState<unknown>(initialCursor);
-  const [hasMore, setHasMore] = useState(initialHasMore);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(initialError);
-  const [isRetryingInitial, setIsRetryingInitial] = useState(false);
-
   // Global Query State
   const {
     searchQuery, setSearchQuery,
     activeCategory, setActiveCategory,
-    sortBy, setSortBy
+    sortBy, setSortBy,
+    marketplaceCache, setMarketplaceCache
   } = useUIStore();
+
+  // Auth State
+  const { isArtist } = useAuthStore();
+
+  const [artworks, setArtworks] = useState<Artwork[]>(marketplaceCache ? marketplaceCache.artworks : initialArtworks);
+  const [lastDoc, setLastDoc] = useState<unknown>(marketplaceCache ? marketplaceCache.lastDoc : initialCursor);
+  const [hasMore, setHasMore] = useState(marketplaceCache ? marketplaceCache.hasMore : initialHasMore);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(initialError);
+  const [isRetryingInitial, setIsRetryingInitial] = useState(false);
 
   // Local UI State
   const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<Artwork[] | null>(null);
+  const [searchResults, setSearchResults] = useState<Artwork[] | null>(marketplaceCache ? marketplaceCache.searchResults : null);
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+
+  // Track state for caching on unmount
+  const stateRef = useRef({ artworks, lastDoc, hasMore, searchResults });
+  useEffect(() => {
+    stateRef.current = { artworks, lastDoc, hasMore, searchResults };
+  }, [artworks, lastDoc, hasMore, searchResults]);
+
+  // Save cache on unmount
+  useEffect(() => {
+    return () => {
+      setMarketplaceCache({
+        ...stateRef.current,
+        scrollY: window.scrollY
+      });
+    };
+  }, [setMarketplaceCache]);
+
+  // Restore scroll position
+  const hasRestoredScroll = useRef(false);
+  useEffect(() => {
+    if (marketplaceCache?.scrollY && !hasRestoredScroll.current) {
+      hasRestoredScroll.current = true;
+      setTimeout(() => window.scrollTo(0, marketplaceCache.scrollY), 100);
+    }
+  }, [marketplaceCache]);
 
   const filterRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
@@ -80,7 +111,17 @@ export default function MarketplaceClient({
   ];
 
   // Effect to handle Search, Filter, and Sort changes
+  const isFirstFilterEffect = useRef(true);
+
   useEffect(() => {
+    const isFirst = isFirstFilterEffect.current;
+    isFirstFilterEffect.current = false;
+
+    if (isFirst && marketplaceCache) {
+      // The cache restoration handles populating searchResults and artworks.
+      return;
+    }
+
     // If there is an active search, perform it (and apply client-side filtering/sorting)
     if (searchQuery.trim()) {
       const timer = setTimeout(async () => {
@@ -208,20 +249,22 @@ export default function MarketplaceClient({
 
   return (
     <>
-      <div className="bg-surface-container-low border-b border-outline-variant" style={{ borderBottom: "1px solid rgba(196, 199, 199, 0.2)" }}>
-        <div className="container py-8 flex flex-col gap-16" style={{ padding: "32px var(--margin-desktop)" }}>
-          <div className="flex justify-between items-end">
+      <div className="bg-surface-container-low border-b border-outline-variant">
+        <div className="container py-8 flex flex-col gap-16">
+          <div className="flex justify-between items-end mobile-flex-col mobile-items-start mobile-gap-16">
             <div>
               <h1 className="text-display-lg text-primary">KalaMarket</h1>
-              <p className="text-body-lg text-on-surface-variant mt-2" style={{ marginTop: 8 }}>
+              <p className="text-body-lg text-on-surface-variant mt-2">
                 Invest in authentic Indian heritage. Verified provenance.
               </p>
             </div>
-            <div className="flex gap-12 relative">
-              <div className="relative" ref={filterRef}>
+            <div className="flex gap-12 relative mobile-w-full mobile-flex-col">
+              <div className="relative mobile-w-full" ref={filterRef}>
                 <button
-                  className={`btn ${activeCategory ? 'btn-outline' : 'btn-outline'}`}
+                  className={`btn ${activeCategory ? 'btn-outline' : 'btn-outline'} mobile-w-full justify-between`}
                   onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
+                  aria-haspopup="listbox"
+                  aria-expanded={isFilterMenuOpen}
                 >
                   {!activeCategory && <Icon name="filter_list" size={18} />}
                   {activeCategory ? activeCategory : 'FILTERS'}
@@ -257,7 +300,7 @@ export default function MarketplaceClient({
                     borderRadius: "2px 0 0 0"
                   }} />
                   <div style={{ padding: "12px 8px", position: "relative", zIndex: 2 }}>
-                    <div className="text-label-sm" style={{ padding: "4px 16px", marginBottom: "8px", color: "rgba(255,255,255,0.6)", letterSpacing: "0.05em" }}>CATEGORIES</div>
+                    <div className="text-label-sm mb-2" style={{ padding: "4px 16px", color: "rgba(255,255,255,0.6)", letterSpacing: "0.05em" }}>CATEGORIES</div>
                     <button
                       className="btn-ghost"
                       style={{
@@ -289,10 +332,12 @@ export default function MarketplaceClient({
                 </div>
               </div>
 
-              <div className="relative" ref={sortRef}>
+              <div className="relative mobile-w-full" ref={sortRef}>
                 <button
-                  className="btn btn-primary"
+                  className="btn btn-primary mobile-w-full justify-between"
                   onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+                  aria-haspopup="listbox"
+                  aria-expanded={isSortMenuOpen}
                 >
                   {sortBy === 'newest' ? 'SORT: NEWEST' : sortOptions.find(o => o.value === sortBy)?.label} <Icon name="expand_more" size={18} />
                 </button>
@@ -346,12 +391,29 @@ export default function MarketplaceClient({
               </div>
             </div>
           </div>
+
+          {isArtist() && (
+            <div className="bg-surface-container border border-outline-variant rounded-md p-4 mt-4 flex justify-between items-center mobile-flex-col mobile-items-start mobile-gap-12">
+              <div>
+                <h3 className="text-title-md text-primary" style={{ fontWeight: 600 }}>Artist Hub</h3>
+                <p className="text-body-sm text-on-surface-variant mt-1">Manage your listings and track your artwork activity.</p>
+              </div>
+              <div className="flex gap-12 mobile-w-full">
+                <Link href="/dashboard/artist/upload" className="btn btn-primary mobile-w-full justify-center">
+                  <Icon name="add" size={18} /> Add New Artwork
+                </Link>
+                <Link href="/dashboard/artist" className="btn btn-outline mobile-w-full justify-center">
+                  Manage Listings
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {searchQuery.trim() ? (
-        <section className="container section-gap" style={{ paddingBottom: 80, paddingTop: 40 }}>
-          <div className="flex justify-between items-center mb-8" style={{ marginBottom: 32 }}>
+        <section className="container section-gap" style={{ paddingBottom: 80, paddingTop: 40 }} aria-live="polite" aria-busy={isSearching}>
+          <div className="flex justify-between items-center mb-8 mobile-flex-col mobile-items-start mobile-gap-12">
             <h2 className="text-headline-md text-on-surface">
               Search Results for "{searchQuery}"
             </h2>
@@ -383,7 +445,7 @@ export default function MarketplaceClient({
             </div>
           ) : (
             <div className="empty-state" style={{ padding: '64px 24px' }}>
-              <span className="material-symbols-outlined empty-state-icon" style={{ fontSize: 48, color: 'var(--color-outline)' }}>
+              <span className="material-symbols-outlined empty-state-icon text-outline" style={{ fontSize: 48 }}>
                 search_off
               </span>
               <h3 className="text-title-lg text-on-surface mt-4 mb-2">No results found</h3>
@@ -404,39 +466,55 @@ export default function MarketplaceClient({
           <section className="container section-gap">
             <SectionHeader title="Curated Collections" />
             <div className="category-grid">
-              <div className="category-item span-2 span-2-row">
+              <button 
+                className="category-item span-2 span-2-row text-left"
+                onClick={() => { setActiveCategory("Chola Bronzes"); setSearchQuery(""); window.scrollTo({top: 0, behavior: 'smooth'}); }}
+                aria-label="Filter by Chola Bronzes"
+              >
                 <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKpT1QStD4QUN9YJvPDowhRfY4TjHRgp14IKqTk-dZPf2QVxjhCYF9Do1TBcz9kYIn25JvmAmgMFN4SiTxz-bfiSaKSqY1jZo1SuUkxPUJ6l9P-9Dm_mRR3HsGLvnppZPcalC7fwYjMPSysIjKXjym_Tw38G3BbEDWKTPLy9TFYrwQHataEMqeki-Net3suHauERIeca6ra8pSls3jpNvn9jl3MGYKzoBJJ3wpU2bcZKdffDylUtqXPcAncnx8sFJ5RrX4wOd3iRu5" alt="Bronzes" fill sizes="(max-width: 768px) 100vw, 50vw" />
                 <div className="category-overlay">
                   <h3 className="text-headline-md text-on-primary">Chola Bronzes</h3>
                 </div>
-              </div>
-              <div className="category-item">
+              </button>
+              <button 
+                className="category-item text-left"
+                onClick={() => { setActiveCategory("Mithila"); setSearchQuery(""); window.scrollTo({top: 0, behavior: 'smooth'}); }}
+                aria-label="Filter by Mithila"
+              >
                 <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuAwJlulKZjpPmd-6a2h5G6AbOOFyYz7zE9LlAwyGcRChBYoAPL9R9mjt-C0525alfJk4yEXwpUhhR_IpWw7z95hBGpGXn7oQ5ai1oIHCBJvoHQS5txRfWMGGRpf0ZTowVPizUw8d6mZ0mRC6L5LBfdUgGtILI4HYDrj8NeB1NRMG30hgZc2VL1z7YW0t2AIm_xiiGp4geGfeyayLm7fkhLan2roWFJdI1Z2o3_yXgbwrqWQSOpuUEJOTxgMpHqU8N5jHG6OUQkjbku_" alt="Paintings" fill sizes="(max-width: 768px) 50vw, 25vw" />
                 <div className="category-overlay">
                   <h3 className="text-title-md text-on-primary">Mithila</h3>
                 </div>
-              </div>
-              <div className="category-item">
+              </button>
+              <button 
+                className="category-item text-left"
+                onClick={() => { setActiveCategory("Textiles"); setSearchQuery(""); window.scrollTo({top: 0, behavior: 'smooth'}); }}
+                aria-label="Filter by Textiles"
+              >
                 <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuDfV8vS5h5VOyr5bH1vMXxhFlMIctImbzswi0rpFLIxUlOlvN6PEWJ4_L-XbD_nLEzkUM1TTOVEFoXiPg72403DPokjRM-L0_HBNz4URAwWbgdK8YN_6R7LtODUqdscYBsiwYOFTjMh7QGmg6T8i05hAlWcXldwNHJHu0XT-BLj15I0EMibTx0rrZulL2vZBAnZKbcYYUVrqeRFH-pWKxAbeh68aft4agkEoWNyqDqKVtvgR9DPhQTFd4oPNBiEIYX3WFSi8fzExVi5" alt="Textiles" fill sizes="(max-width: 768px) 50vw, 25vw" />
                 <div className="category-overlay">
                   <h3 className="text-title-md text-on-primary">Textiles</h3>
                 </div>
-              </div>
-              <div className="category-item span-2">
+              </button>
+              <button 
+                className="category-item span-2 text-left"
+                onClick={() => { setActiveCategory("Mysore Woodcraft"); setSearchQuery(""); window.scrollTo({top: 0, behavior: 'smooth'}); }}
+                aria-label="Filter by Mysore Woodcraft"
+              >
                 <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9Nl4KAeLTkOxgSkftwoUkycNLcgMiXyRcyOC7cDH0unfRLptrT3zB7nQtdTQy8EUNLcJ5LX-HtWx3-P4QSMgZ_N0CXsbyNRvlmIjh6bTlCImv5GfUQBJi9TXzpJIx0LRPBaMbE9ufV26-po5glJ1KCm8L0L7_b2AGG_hRJYLnkKbSumOD8uv36xjarsOb3UVUO2_Wa9wsb0yQeg4aogK8cupTL7ZVZN8JcZRY_vxKJrfxrt7riLYWOgVYmSXFi3j3Fa2XolbH9bFm" alt="Woodcraft" fill sizes="(max-width: 768px) 100vw, 50vw" />
                 <div className="category-overlay">
                   <h3 className="text-headline-md text-on-primary">Mysore Woodcraft</h3>
                 </div>
-              </div>
+              </button>
             </div>
           </section>
 
-          <section className="container" style={{ paddingBottom: 80 }}>
+          <section className="container" style={{ paddingBottom: 80 }} aria-live="polite" aria-busy={isRetryingInitial || isLoadingMore}>
             <SectionHeader title="New Arrivals" />
 
             {error && artworks.length === 0 ? (
               <div className="empty-state">
-                <span className="material-symbols-outlined empty-state-icon" style={{ fontSize: 32, color: 'var(--color-error, #b3261e)' }}>
+                <span className="material-symbols-outlined empty-state-icon text-error" style={{ fontSize: 32 }}>
                   error_outline
                 </span>
                 <h3 className="text-title-lg text-on-surface mb-2">{error}</h3>
@@ -479,7 +557,7 @@ export default function MarketplaceClient({
 
                 {error && artworks.length > 0 && (
                   <div className="flex flex-col items-center gap-16" style={{ marginTop: 64 }}>
-                    <p className="text-body-md text-error" style={{ color: 'var(--color-error, #b3261e)' }} role="alert">{error}</p>
+                    <p className="text-body-md text-error" role="alert">{error}</p>
                     <button
                       className="btn btn-outline btn-lg"
                       onClick={handleLoadMore}
