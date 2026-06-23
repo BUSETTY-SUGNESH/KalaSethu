@@ -356,7 +356,9 @@ export default function AuctionDetailsClient({
                       }}
                     >
                       <div className="flex items-center gap-8">
-                        <Icon name="trending_up" size={16} style={{ color: 'var(--color-accent-gold)', flexShrink: 0 }} />
+                        <span style={{ color: 'var(--color-accent-gold)', flexShrink: 0, display: 'flex' }}>
+                          <Icon name="trending_up" size={16} />
+                        </span>
                         <span className="text-label-sm" style={{ color: 'var(--color-on-surface)' }}>
                           The bid has increased. New minimum:{' '}
                           <strong>₹{staleMinBid.toLocaleString('en-IN')}</strong>

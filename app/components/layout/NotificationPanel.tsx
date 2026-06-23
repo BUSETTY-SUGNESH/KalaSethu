@@ -143,7 +143,18 @@ export default function NotificationPanel() {
                   {notif.message}
                 </p>
                 <p className="text-caption" style={{ marginTop: 4, color: 'var(--color-primary)', opacity: 0.8 }}>
-                  {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
+                  {(() => {
+                    let d = new Date();
+                    try {
+                      if (notif.createdAt) {
+                        d = typeof (notif.createdAt as any).toDate === 'function' 
+                          ? (notif.createdAt as any).toDate() 
+                          : new Date(notif.createdAt);
+                        if (isNaN(d.getTime())) d = new Date();
+                      }
+                    } catch (e) {}
+                    return formatDistanceToNow(d, { addSuffix: true });
+                  })()}
                 </p>
               </div>
               {!notif.isRead && <div className="notification-dot" />}

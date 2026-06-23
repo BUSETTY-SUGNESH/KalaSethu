@@ -1,5 +1,5 @@
 import { adminDb } from '@/lib/firebase/admin';
-import type { Auction, AuctionBid } from '@/app/types';
+import type { Auction, Bid } from '@/app/types';
 
 /**
  * Server-only service for fetching auctions using firebase-admin.
@@ -47,7 +47,7 @@ export async function getAuctionServer(auctionId: string): Promise<Auction | nul
   }
 }
 
-export async function getAuctionBidsServer(auctionId: string): Promise<AuctionBid[]> {
+export async function getAuctionBidsServer(auctionId: string): Promise<Bid[]> {
   try {
     const snapshot = await adminDb
       .collection('auctions')
@@ -61,7 +61,7 @@ export async function getAuctionBidsServer(auctionId: string): Promise<AuctionBi
       return {
         id: doc.id,
         ...data,
-      } as AuctionBid;
+      } as Bid;
     });
   } catch (error) {
     console.error(`Error fetching bids for auction ${auctionId} server-side:`, error);

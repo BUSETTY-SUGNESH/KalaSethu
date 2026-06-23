@@ -15,9 +15,7 @@ export default function BidsClient({ initialAuctions }: { initialAuctions: Aucti
   const [auctions, setAuctions] = useState<Auction[]>(initialAuctions);
   const { user, isArtist } = useAuthStore();
 
-  if (isArtist()) {
-    return <SellerBidsClient />;
-  }
+  // isArtist check moved to the bottom to avoid breaking React hook rules
 
   const [analytics, setAnalytics] = useState<{
     totalParticipated: number;
@@ -146,7 +144,9 @@ export default function BidsClient({ initialAuctions }: { initialAuctions: Aucti
         <div className="card" style={{ padding: 24, backgroundColor: "var(--color-surface-container-lowest)" }}>
           <h3 className="text-headline-sm text-primary" style={{ marginBottom: 16 }}>Artist Analytics</h3>
           <div className="bg-surface-container-low p-4 rounded text-center" style={{ padding: 16, borderRadius: 8 }}>
-            <Icon name="monitoring" size={32} className="text-primary" style={{ marginBottom: 8 }} />
+            <span style={{ marginBottom: 8, display: 'inline-block' }}>
+              <Icon name="monitoring" size={32} className="text-primary" />
+            </span>
             <p className="text-label-md text-primary font-bold mt-2">Coming Soon</p>
             <p className="text-body-sm text-on-surface-variant mt-2">Track your auction performance and earnings here.</p>
           </div>
@@ -261,6 +261,10 @@ export default function BidsClient({ initialAuctions }: { initialAuctions: Aucti
       </div>
     );
   };
+
+  if (isArtist()) {
+    return <SellerBidsClient />;
+  }
 
   return (
     <>

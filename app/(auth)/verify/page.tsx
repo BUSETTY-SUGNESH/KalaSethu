@@ -56,8 +56,13 @@ export default function VerifyPage() {
     const user = getCurrentUser();
     if (user) {
       user.reload().then(() => {
-        if (user.emailVerified) {
-          addToast({ type: 'success', title: 'Email Verified!', message: 'Redirecting...' });
+        // [DEV OVERRIDE] Bypass email verification locally so the user can test without real emails
+        if (user.emailVerified || process.env.NODE_ENV === 'development') {
+          if (process.env.NODE_ENV === 'development') {
+             addToast({ type: 'success', title: 'Dev Bypass', message: 'Bypassed verification for local development.' });
+          } else {
+             addToast({ type: 'success', title: 'Email Verified!', message: 'Redirecting...' });
+          }
           router.push('/role');
         } else {
           addToast({ type: 'info', title: 'Not yet verified', message: 'Please click the link in your email.' });
