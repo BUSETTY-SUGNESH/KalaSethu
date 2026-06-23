@@ -10,6 +10,19 @@ export interface Auction {
   winnerId?: string;
   winnerName?: string;
   updatedAt?: string;
+  // Artwork context — stored on auction document, used for notification copy
+  artworkId?: string;
+  artworkTitle?: string;
+  artworkImageUrl?: string;
+  artistId?: string;
+  artistName?: string;
+  startPrice?: number;
+  // Outbid detection — updated on every bid placement
+  lastBidderId?: string;
+  lastBidderName?: string;
+  // Ending-soon deduplication — array of interval keys already dispatched
+  // e.g. ['24h', '1h', '15m']
+  notifiedIntervals?: string[];
 }
 
 export interface Bid {

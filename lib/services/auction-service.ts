@@ -11,6 +11,8 @@ import type {
   PaginatedResult,
 } from '@/app/types';
 import { type DocumentSnapshot, type Unsubscribe, subcollections, addDoc } from '@/lib/firebase/firestore';
+import { functions } from '@/lib/firebase/config';
+import { httpsCallable } from 'firebase/functions';
 
 // --- Create Auction ---
 export async function createAuction(
@@ -53,6 +55,11 @@ export async function createAuction(
 // --- Get Auction ---
 export async function getAuction(auctionId: string): Promise<Auction | null> {
   return auctionRepository.findById(auctionId);
+}
+
+// --- Get Multiple Auctions by IDs ---
+export async function getAuctionsByIds(auctionIds: string[]): Promise<Auction[]> {
+  return auctionRepository.findAuctionsByIds(auctionIds);
 }
 
 // --- Subscribe to Auction (real-time) ---
@@ -146,11 +153,31 @@ export async function placeBid(data: {
   bidderName: string;
   amount: number;
 }): Promise<void> {
-  const bidsRef = subcollections.auctionBids(data.auctionId);
-  await addDoc(bidsRef, {
-    bidderId: data.bidderId,
+  const placeBidCallable = httpsCallable(functions, 'placeBid');
+  const result = await placeBidCallable({
+    auctionId: data.auctionId,
     bidderName: data.bidderName,
-    amount: data.amount,
-    timestamp: new Date().toISOString(),
+    amount: data.amount
   });
+  
+  if (!(result.data as any).success) {
+    throw new Error('Bid placement failed on server.');
+  }
+}
+
+// --- Get User Bid Analytics ---
+export async function getUserBidAnalytics(): Promise<{
+  totalParticipated: number;
+  activeBids: number;
+  wonItems: number;
+  winRate: number;
+}> {
+  const getAnalyticsCallable = httpsCallable(functions, 'getUserBidAnalytics');
+  const result = await getAnalyticsCallable();
+  return result.data as {
+    totalParticipated: number;
+    activeBids: number;
+    wonItems: number;
+    winRate: number;
+  };
 }

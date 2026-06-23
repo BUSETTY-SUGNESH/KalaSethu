@@ -54,6 +54,27 @@ export const auctionRepository = {
     });
   },
 
+  async findAuctionsByIds(ids: string[]): Promise<Auction[]> {
+    if (ids.length === 0) return [];
+    
+    // Firestore 'in' queries are limited to 30 items. Chunking.
+    const chunkSize = 30;
+    const allAuctions: Auction[] = [];
+    
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const q = query(
+        collections.auctions(),
+        where('__name__', 'in', chunk)
+      );
+      const snap = await getDocs(q);
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }) as Auction);
+      allAuctions.push(...docs);
+    }
+    
+    return allAuctions;
+  },
+
   async findActive(
     pageSize: number = 20,
     lastDoc?: DocumentSnapshot | null

@@ -33,32 +33,50 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.closeEndedAuctions = exports.onBidPlaced = void 0;
+exports.getUserBidAnalytics = exports.closeEndedAuctions = exports.placeBid = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const config_1 = require("./config");
 const auction_repository_1 = require("./repositories/auction.repository");
-// This runs automatically when a new bid is created in the subcollection
-exports.onBidPlaced = functions.firestore
-    .document('auctions/{auctionId}/bids/{bidId}')
-    .onCreate(async (snap, context) => {
-    const bidData = snap.data();
-    const auctionId = context.params.auctionId;
+// This is a secure callable function to place bids and update the auction transactionally
+exports.placeBid = functions.region('asia-south1').https.onCall(async (data, context) => {
+    // Authentication check
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to place a bid.');
+    }
+    const { auctionId, amount, bidderName } = data;
+    if (!auctionId || typeof amount !== 'number') {
+        throw new functions.https.HttpsError('invalid-argument', 'The function must be called with an auctionId and a valid amount.');
+    }
+    const bidderId = context.auth.uid;
     const auctionRef = config_1.db.collection("auctions").doc(auctionId);
+    const bidsRef = auctionRef.collection("bids");
     try {
-        await config_1.db.runTransaction(async (transaction) => {
+        return await config_1.db.runTransaction(async (transaction) => {
             const auctionDoc = await transaction.get(auctionRef);
             if (!auctionDoc.exists) {
-                throw new Error("Auction does not exist!");
+                throw new functions.https.HttpsError('not-found', "Auction does not exist!");
             }
             const auctionData = auctionDoc.data();
             // Prevent bids if auction is ended
             if (auctionData?.status === 'ended') {
-                throw new Error("Auction has already ended");
+                throw new functions.https.HttpsError('failed-precondition', "Auction has already ended.");
+            }
+            if (auctionData?.status !== 'live' && auctionData?.status !== 'ending_soon') {
+                throw new functions.https.HttpsError('failed-precondition', "Auction is not currently accepting bids.");
+            }
+            const endsAt = new Date(auctionData?.endsAt);
+            if (endsAt.getTime() < Date.now()) {
+                throw new functions.https.HttpsError('failed-precondition', "Auction has already ended.");
+            }
+            if (auctionData?.artistId === bidderId) {
+                throw new functions.https.HttpsError('failed-precondition', "You cannot bid on your own auction.");
+            }
+            if (amount < auctionData.currentBid + auctionData.minIncrement) {
+                throw new functions.https.HttpsError('failed-precondition', `Bid amount must be at least ₹${(auctionData.currentBid + auctionData.minIncrement).toLocaleString('en-IN')}`);
             }
             // Anti-snipe: if bid is placed within last 5 minutes, extend auction by 5 mins
-            const endsAt = new Date(auctionData?.endsAt);
-            const bidTime = new Date(bidData.timestamp);
+            const bidTime = new Date();
             const timeRemainingMs = endsAt.getTime() - bidTime.getTime();
             let newEndsAt = endsAt.toISOString();
             if (timeRemainingMs < 5 * 60 * 1000 && timeRemainingMs > 0) {
@@ -69,16 +87,28 @@ exports.onBidPlaced = functions.firestore
             }
             // Update the auction document with new highest bid
             transaction.update(auctionRef, {
-                currentBid: bidData.amount,
-                bidCount: admin.firestore.FieldValue.increment(1),
+                currentBid: amount,
+                totalBids: admin.firestore.FieldValue.increment(1),
                 endsAt: newEndsAt,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
+            // Write the new bid document
+            const newBidRef = bidsRef.doc();
+            transaction.set(newBidRef, {
+                bidderId,
+                bidderName: bidderName || 'Anonymous',
+                amount,
+                timestamp: bidTime.toISOString(),
+            });
+            return { success: true, bidId: newBidRef.id, amount, newEndsAt };
         });
-        console.log(`Successfully processed bid for auction ${auctionId}`);
     }
     catch (error) {
         console.error(`Failed to process bid for auction ${auctionId}`, error);
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
+        throw new functions.https.HttpsError('internal', 'Unable to place bid at this time. Please try again.');
     }
 });
 // A scheduled function that checks for ended auctions (Runs every minute)
@@ -117,5 +147,70 @@ exports.closeEndedAuctions = functions.pubsub.schedule('every 1 minutes').onRun(
         console.error("Error closing auctions", error);
     }
     return null;
+});
+// Calculate bid analytics for a user securely
+exports.getUserBidAnalytics = functions.region('asia-south1').https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = context.auth.uid;
+    try {
+        // Get all bids placed by the user
+        const bidsSnapshot = await config_1.db.collectionGroup('bids').where('bidderId', '==', userId).get();
+        // Extract unique auction IDs
+        const auctionIds = new Set();
+        bidsSnapshot.docs.forEach(doc => {
+            // The path is auctions/{auctionId}/bids/{bidId}
+            const auctionId = doc.ref.parent.parent?.id;
+            if (auctionId)
+                auctionIds.add(auctionId);
+        });
+        const uniqueAuctionIds = Array.from(auctionIds);
+        if (uniqueAuctionIds.length === 0) {
+            return {
+                totalParticipated: 0,
+                activeBids: 0,
+                wonItems: 0,
+                winRate: 0
+            };
+        }
+        // Firestore 'in' query limit is 30. Chunk the requests.
+        const chunkSize = 30;
+        const auctionDocs = [];
+        for (let i = 0; i < uniqueAuctionIds.length; i += chunkSize) {
+            const chunk = uniqueAuctionIds.slice(i, i + chunkSize);
+            const snapshot = await config_1.db.collection('auctions').where(admin.firestore.FieldPath.documentId(), 'in', chunk).get();
+            snapshot.docs.forEach(d => auctionDocs.push({ id: d.id, ...d.data() }));
+        }
+        let activeBids = 0;
+        let wonItems = 0;
+        let endedAuctionsParticipated = 0;
+        for (const auction of auctionDocs) {
+            const isEnded = auction.status === 'ended' || new Date(auction.endsAt).getTime() < Date.now();
+            if (isEnded) {
+                endedAuctionsParticipated++;
+                if (auction.winnerId === userId) {
+                    wonItems++;
+                }
+            }
+            else {
+                // Count active auctions they participated in as active bids
+                activeBids++;
+            }
+        }
+        const winRate = endedAuctionsParticipated > 0
+            ? Math.round((wonItems / endedAuctionsParticipated) * 100)
+            : 0;
+        return {
+            totalParticipated: uniqueAuctionIds.length,
+            activeBids,
+            wonItems,
+            winRate
+        };
+    }
+    catch (error) {
+        console.error("Error calculating bid analytics:", error);
+        throw new functions.https.HttpsError('internal', 'Unable to calculate analytics.');
+    }
 });
 //# sourceMappingURL=auction.js.map

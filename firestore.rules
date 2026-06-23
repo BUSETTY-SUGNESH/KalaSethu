@@ -137,9 +137,8 @@ service cloud.firestore {
       // Nested bids collection
       match /bids/{bidId} {
         allow read: if true;
-        allow create: if isAuthenticated()
-          && request.resource.data.bidderId == request.auth.uid
-          && request.resource.data.amount is number;
+        // Bids are ONLY created via Cloud Functions
+        allow create: if false;
         allow update, delete: if false;
       }
     }

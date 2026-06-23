@@ -520,7 +520,9 @@ export type NotificationType =
   | 'bid_placed'
   | 'bid_outbid'
   | 'auction_won'
-  | 'auction_ending'
+  | 'auction_lost'             // bidder who did not win when auction closes
+  | 'auction_ending'           // ending-soon reminder (24h / 1h / 15m)
+  | 'auction_closed_artist'    // artist notified their auction has ended
   | 'order_placed'
   | 'order_shipped'
   | 'order_delivered'
