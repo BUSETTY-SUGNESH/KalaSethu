@@ -9,10 +9,15 @@ import type { Auction } from "@/app/types";
 import { formatDistanceToNow } from "date-fns";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { getUserBidAnalytics, getUserBids, getAuctionsByIds } from "@/lib/services/auction-service";
+import SellerBidsClient from "./SellerBidsClient";
 
 export default function BidsClient({ initialAuctions }: { initialAuctions: Auction[] }) {
   const [auctions, setAuctions] = useState<Auction[]>(initialAuctions);
-  const { user } = useAuthStore();
+  const { user, isArtist } = useAuthStore();
+
+  if (isArtist()) {
+    return <SellerBidsClient />;
+  }
 
   const [analytics, setAnalytics] = useState<{
     totalParticipated: number;

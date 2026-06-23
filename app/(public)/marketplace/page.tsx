@@ -1,14 +1,13 @@
 import { getPublishedArtworksServer } from "@/lib/services/server/artwork-admin.service";
 import MarketplaceClient from "./MarketplaceClient";
+import type { Artwork } from "@/app/types";
 
 export const metadata = {
   title: "KalaMarket | Authentic Indian Art",
   description: "Invest in authentic Indian heritage. Discover curated collections and new arrivals with verified provenance.",
 };
 
-export const dynamic = "force-dynamic"; // Optional, but usually needed if you want fresh results. Or you can revalidate.
-
-import type { Artwork } from "@/app/types";
+export const dynamic = "force-dynamic";
 
 export default async function MarketplacePage() {
   let data: Artwork[] = [];

@@ -12,6 +12,5 @@ export const revalidate = 0;
 
 export default async function BidsPage() {
   const auctions = await getActiveAuctionsServer(10);
-
   return <BidsClient initialAuctions={auctions} />;
 }
