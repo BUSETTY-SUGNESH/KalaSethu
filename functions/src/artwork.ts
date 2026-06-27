@@ -1,10 +1,27 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 
+import { db } from './config';
 import { artworkRepository } from './repositories/artwork.repository';
 import { userRepository } from './repositories/user.repository';
+import { assertAppCheck } from './utils/app-check';
+import { assertRateLimit } from './utils/rate-limit';
+import { ChunkedBatchWriter } from './utils/batch-commit';
 
-export const onArtworkWritten = functions.firestore
+function isKeywordMaintenanceWrite(
+  prevData: admin.firestore.DocumentData | undefined,
+  data: admin.firestore.DocumentData | undefined
+): boolean {
+  if (!prevData || !data) return false;
+  return (
+    (prevData.title || '') === (data.title || '') &&
+    (prevData.category || '') === (data.category || '') &&
+    prevData.status === data.status &&
+    prevData.artistId === data.artistId
+  );
+}
+
+export const onArtworkWritten = functions.region('asia-south1').firestore
   .document('artworks/{artworkId}')
   .onWrite(async (change, context) => {
     const artworkId = context.params.artworkId;
@@ -15,7 +32,7 @@ export const onArtworkWritten = functions.firestore
     if (!change.after.exists) {
       if (prevData?.status === 'published' && prevData?.artistId) {
         try {
-          await admin.firestore().collection("users").doc(prevData.artistId).update({
+          await db.collection("users").doc(prevData.artistId).update({
             artworkCount: admin.firestore.FieldValue.increment(-1)
           });
           console.log(`Decremented artworkCount for artist: ${prevData.artistId}`);
@@ -23,6 +40,11 @@ export const onArtworkWritten = functions.firestore
           console.error("Error decrementing artworkCount on delete", error);
         }
       }
+      return;
+    }
+
+    // Skip re-processing when only searchKeywords/updatedAt changed (keyword echo write)
+    if (change.before.exists && isKeywordMaintenanceWrite(prevData, data)) {
       return;
     }
 
@@ -34,7 +56,7 @@ export const onArtworkWritten = functions.firestore
     if (artistId) {
       if (statusBefore !== 'published' && statusAfter === 'published') {
         try {
-          await admin.firestore().collection("users").doc(artistId).update({
+          await db.collection("users").doc(artistId).update({
             artworkCount: admin.firestore.FieldValue.increment(1)
           });
           console.log(`Incremented artworkCount for artist: ${artistId}`);
@@ -43,7 +65,7 @@ export const onArtworkWritten = functions.firestore
         }
       } else if (statusBefore === 'published' && statusAfter !== 'published') {
         try {
-          await admin.firestore().collection("users").doc(artistId).update({
+          await db.collection("users").doc(artistId).update({
             artworkCount: admin.firestore.FieldValue.increment(-1)
           });
           console.log(`Decremented artworkCount for artist: ${artistId}`);
@@ -75,7 +97,6 @@ export const onArtworkWritten = functions.firestore
         try {
           await change.after.ref.update({
             searchKeywords: uniqueKeywords,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
           });
           console.log(`Generated search keywords for artwork: ${artworkId}`);
         } catch (error) {
@@ -88,26 +109,28 @@ export const onArtworkWritten = functions.firestore
     if (statusAfter === 'published' && statusBefore !== 'published') {
       try {
         console.log(`Artwork ${artworkId} published! Notifying followers...`);
-        // We can fetch followers and write notifications
         if (artistId) {
-          const followersSnap = await admin.firestore().collection("users").doc(artistId).collection("followers").get();
-          const batch = admin.firestore().batch();
-          
-          followersSnap.docs.forEach(doc => {
+          const followersSnap = await db.collection("users").doc(artistId).collection("followers").get();
+          const writer = new ChunkedBatchWriter();
+
+          for (const doc of followersSnap.docs) {
             const followerId = doc.id;
-            const notifRef = admin.firestore().collection("users").doc(followerId).collection("notifications").doc();
-            batch.set(notifRef, {
-              userId: followerId,
-              title: "New Artwork Uploaded",
-              message: `${data.artistName || "An artist"} has uploaded a new artwork: "${data.title}"`,
-              type: "system",
-              isRead: false,
-              actionUrl: `/artwork/${artworkId}`,
-              createdAt: admin.firestore.FieldValue.serverTimestamp()
+            writer.write((batch) => {
+              const notifRef = db.collection("users").doc(followerId).collection("notifications").doc();
+              batch.set(notifRef, {
+                userId: followerId,
+                title: "New Artwork Uploaded",
+                message: `${data.artistName || "An artist"} has uploaded a new artwork: "${data.title}"`,
+                type: "system",
+                isRead: false,
+                actionUrl: `/artwork/${artworkId}`,
+                createdAt: admin.firestore.FieldValue.serverTimestamp()
+              });
             });
-          });
-          
-          await batch.commit();
+            await writer.flushIfNeeded();
+          }
+
+          await writer.commit();
         }
       } catch (error) {
         console.error("Error processing artwork publication notifications", error);
@@ -115,12 +138,69 @@ export const onArtworkWritten = functions.firestore
     }
   });
 
-export const moderateArtwork = functions.https.onCall(async (data, context) => {
+export const submitArtworkForReview = functions.region('asia-south1').https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+  }
+
+  assertAppCheck(context);
+  await assertRateLimit(context.auth.uid, 'submitArtworkForReview');
+
+  const { artworkId } = data;
+  if (!artworkId || typeof artworkId !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing artworkId');
+  }
+
+  const artwork = await artworkRepository.getArtwork(artworkId);
+  if (!artwork) {
+    throw new functions.https.HttpsError('not-found', 'Artwork not found');
+  }
+
+  if (artwork.artistId !== context.auth.uid) {
+    throw new functions.https.HttpsError('permission-denied', 'Not the artwork owner');
+  }
+
+  if (!['draft', 'pending'].includes(artwork.status)) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Artwork must be in draft or pending status to submit'
+    );
+  }
+
+  const userData = await userRepository.getUser(context.auth.uid);
+  const isVerified =
+    userData?.role === 'verified_artist'
+    || userData?.role === 'admin'
+    || userData?.isVerified === true;
+
+  const status = isVerified ? 'published' : 'pending';
+  const updates: Record<string, unknown> = {
+    status,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  if (status === 'published') {
+    updates.publishedAt = admin.firestore.FieldValue.serverTimestamp();
+  }
+
+  try {
+    await artworkRepository.updateArtwork(artworkId, updates);
+    return { success: true, status };
+  } catch (error) {
+    console.error('Submit artwork error', error);
+    throw new functions.https.HttpsError('internal', 'Failed to submit artwork');
+  }
+});
+
+export const moderateArtwork = functions.region('asia-south1').https.onCall(async (data, context) => {
   // Only admins can call this
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
   }
-  
+
+  assertAppCheck(context);
+  await assertRateLimit(context.auth.uid, 'moderateArtwork');
+
   // Verify admin status (simplified)
   const userData = await userRepository.getUser(context.auth.uid);
   if (userData?.role !== 'admin' && userData?.role !== 'moderator') {
@@ -134,11 +214,16 @@ export const moderateArtwork = functions.https.onCall(async (data, context) => {
 
   try {
     const status = action === 'approve' ? 'published' : 'rejected';
-    
-    await artworkRepository.updateArtwork(artworkId, {
+    const updates: Record<string, unknown> = {
       status,
       moderationReason: reason || null,
-    });
+    };
+
+    if (status === 'published') {
+      updates.publishedAt = admin.firestore.FieldValue.serverTimestamp();
+    }
+
+    await artworkRepository.updateArtwork(artworkId, updates);
 
     return { success: true, status };
   } catch (error) {

@@ -49,4 +49,5 @@ export interface Artwork {
 export interface User {
   id: string;
   role: string;
+  isVerified?: boolean;
 }

@@ -61,7 +61,12 @@ interface UIState {
   clearMarketplaceCache: () => void;
 }
 
-let toastCounter = 0;
+function createToastId(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `toast_${crypto.randomUUID()}`;
+  }
+  return `toast_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
 
 export const useUIStore = create<UIState>((set) => ({
   // Mobile Navigation
@@ -97,7 +102,7 @@ export const useUIStore = create<UIState>((set) => ({
   // Toasts
   toasts: [],
   addToast: (toast) => {
-    const id = `toast_${++toastCounter}`;
+    const id = createToastId();
     set((s) => ({ toasts: [...s.toasts, { ...toast, id }] }));
     // Auto-remove after duration
     setTimeout(() => {

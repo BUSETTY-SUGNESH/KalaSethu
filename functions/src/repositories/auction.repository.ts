@@ -29,8 +29,16 @@ export const auctionRepository = {
 
   async getActiveEndedAuctions(now: string) {
     const snap = await db.collection('auctions')
-      .where('status', '==', 'active')
+      .where('status', 'in', ['live', 'ending_soon'])
       .where('endsAt', '<=', now)
+      .get();
+    return snap.docs;
+  },
+
+  async getScheduledAuctionsReadyToStart(now: string) {
+    const snap = await db.collection('auctions')
+      .where('status', '==', 'scheduled')
+      .where('startsAt', '<=', now)
       .get();
     return snap.docs;
   }

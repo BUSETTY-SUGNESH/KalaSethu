@@ -157,6 +157,14 @@
       "collectionGroup": "auctions",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "startsAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "auctions",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "artistId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
@@ -307,12 +315,21 @@
         { "fieldPath": "createdAt", "order": "ASCENDING" }
       ]
     },
+
     {
       "collectionGroup": "analytics",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "period", "order": "ASCENDING" },
         { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "paymentCaptures",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "capturedAt", "order": "ASCENDING" }
       ]
     }
   ],

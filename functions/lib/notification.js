@@ -35,27 +35,31 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.cleanupOldNotifications = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
-const admin = __importStar(require("firebase-admin"));
-const db = admin.firestore();
+const config_1 = require("./config");
 // Cleanup old notifications (e.g., older than 30 days) to save space
-exports.cleanupOldNotifications = functions.pubsub.schedule('every 24 hours').onRun(async (context) => {
+exports.cleanupOldNotifications = functions.region('asia-south1').pubsub.schedule('every 24 hours').onRun(async (context) => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     try {
-        // This requires a group collection query or looping through users
-        const usersSnapshot = await db.collection("users").get();
         let deletedCount = 0;
-        for (const userDoc of usersSnapshot.docs) {
-            const oldNotifsSnapshot = await db.collection(`users/${userDoc.id}/notifications`)
-                .where("createdAt", "<", thirtyDaysAgo)
+        let hasMore = true;
+        while (hasMore) {
+            const oldNotifsSnapshot = await config_1.db.collectionGroup('notifications')
+                .where('createdAt', '<', thirtyDaysAgo)
+                .limit(500)
                 .get();
-            if (!oldNotifsSnapshot.empty) {
-                const batch = db.batch();
-                oldNotifsSnapshot.docs.forEach(doc => {
-                    batch.delete(doc.ref);
-                    deletedCount++;
-                });
-                await batch.commit();
+            if (oldNotifsSnapshot.empty) {
+                hasMore = false;
+                break;
+            }
+            const batch = config_1.db.batch();
+            oldNotifsSnapshot.docs.forEach(doc => {
+                batch.delete(doc.ref);
+                deletedCount++;
+            });
+            await batch.commit();
+            if (oldNotifsSnapshot.size < 500) {
+                hasMore = false;
             }
         }
         console.log(`Successfully cleaned up ${deletedCount} old notifications`);

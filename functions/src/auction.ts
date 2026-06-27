@@ -3,6 +3,9 @@ import * as admin from "firebase-admin";
 
 import { db } from './config';
 import { auctionRepository } from './repositories/auction.repository';
+import { assertAppCheck } from './utils/app-check';
+import { assertRateLimit } from './utils/rate-limit';
+import { validateBidPayload } from './utils/schema-validation';
 import {
   notifyOutbid,
   batchNotifyAuctionWon,
@@ -11,6 +14,7 @@ import {
   batchNotifyAuctionEndingSoon,
   getUniqueBidderIds,
 } from './notification-helpers';
+import { ChunkedBatchWriter } from './utils/batch-commit';
 
 // ─────────────────────────────────────────────────────────────
 // placeBid — Secure callable function to place bids
@@ -32,6 +36,9 @@ export const placeBid = functions.region('asia-south1').https.onCall(async (data
     );
   }
 
+  assertAppCheck(context);
+  await assertRateLimit(context.auth.uid, 'placeBid');
+
   const { auctionId, amount, bidderName } = data;
 
   if (!auctionId || typeof amount !== 'number') {
@@ -42,6 +49,7 @@ export const placeBid = functions.region('asia-south1').https.onCall(async (data
   }
 
   const bidderId = context.auth.uid;
+  validateBidPayload({ auctionId, amount, bidderId });
   const auctionRef = db.collection("auctions").doc(auctionId);
   const bidsRef = auctionRef.collection("bids");
 
@@ -169,6 +177,47 @@ export const placeBid = functions.region('asia-south1').https.onCall(async (data
 });
 
 // ─────────────────────────────────────────────────────────────
+// startScheduledAuctions — Scheduled (every 1 minute)
+// ─────────────────────────────────────────────────────────────
+// Transitions auctions from scheduled → live when startsAt has passed.
+// Idempotent: only queries status == 'scheduled'; once live, never re-selected.
+// ─────────────────────────────────────────────────────────────
+export const startScheduledAuctions = functions.region('asia-south1').pubsub
+  .schedule('every 1 minutes')
+  .onRun(async () => {
+    const now = new Date().toISOString();
+
+    try {
+      const snapshotDocs = await auctionRepository.getScheduledAuctionsReadyToStart(now);
+
+      if (snapshotDocs.length === 0) {
+        return null;
+      }
+
+      console.log(`Found ${snapshotDocs.length} scheduled auctions to start`);
+
+      const writer = new ChunkedBatchWriter();
+
+      for (const doc of snapshotDocs) {
+        writer.write((batch) => {
+          batch.update(doc.ref, {
+            status: 'live',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        });
+        await writer.flushIfNeeded();
+      }
+
+      await writer.commit();
+      console.log(`Successfully started ${snapshotDocs.length} auctions`);
+    } catch (error) {
+      console.error('Error starting scheduled auctions', error);
+    }
+
+    return null;
+  });
+
+// ─────────────────────────────────────────────────────────────
 // closeEndedAuctions — Scheduled (every 1 minute)
 // ─────────────────────────────────────────────────────────────
 // Changes for Issue 2.3:
@@ -176,9 +225,9 @@ export const placeBid = functions.region('asia-south1').https.onCall(async (data
 //   - Batch-writes win / loss / artist notifications in the
 //     SAME batch as the auction status update
 //   - Duplicate prevention: once status becomes 'ended' the
-//     query filter (status == 'active') never re-selects it
+//     query filter (status in live/ending_soon) never re-selects it
 // ─────────────────────────────────────────────────────────────
-export const closeEndedAuctions = functions.pubsub.schedule('every 1 minutes').onRun(async (context) => {
+export const closeEndedAuctions = functions.region('asia-south1').pubsub.schedule('every 1 minutes').onRun(async (context) => {
   const now = new Date().toISOString();
   
   try {
@@ -190,7 +239,7 @@ export const closeEndedAuctions = functions.pubsub.schedule('every 1 minutes').o
     
     console.log(`Found ${snapshotDocs.length} auctions to close`);
     
-    const batch = db.batch();
+    const writer = new ChunkedBatchWriter();
     
     for (const doc of snapshotDocs) {
       const auctionData = doc.data() as admin.firestore.DocumentData;
@@ -209,15 +258,17 @@ export const closeEndedAuctions = functions.pubsub.schedule('every 1 minutes').o
       }
 
       // ── Mark auction as ended ──────────────────────────────
-      batch.update(doc.ref, {
-        status: "ended",
-        winnerId,
-        winnerName,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      writer.write((batch) => {
+        batch.update(doc.ref, {
+          status: "ended",
+          winnerId,
+          winnerName,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
       });
+      await writer.flushIfNeeded();
 
       // ── Build notification payloads ────────────────────────
-      // Reconstruct an Auction-shaped object from the raw doc
       const auction = {
         id: doc.id,
         artworkId: auctionData.artworkId,
@@ -231,40 +282,38 @@ export const closeEndedAuctions = functions.pubsub.schedule('every 1 minutes').o
         bidCount: auctionData.totalBids ?? 0,
       };
 
-      // Notify winner
       if (winnerId) {
-        batchNotifyAuctionWon(batch, winnerId, auction, winningAmount);
+        writer.write((batch) => batchNotifyAuctionWon(batch, winnerId, auction, winningAmount));
+        await writer.flushIfNeeded();
       }
 
-      // Notify all other bidders (losers)
-      // One getDocs per auction — acceptable: fires once per auction lifetime
       try {
         const allBidderIds = await getUniqueBidderIds(doc.id);
         for (const bidderId of allBidderIds) {
           if (bidderId !== winnerId) {
-            batchNotifyAuctionLost(batch, bidderId, auction);
+            writer.write((batch) => batchNotifyAuctionLost(batch, bidderId, auction));
+            await writer.flushIfNeeded();
           }
         }
       } catch (bidderErr) {
         console.error(`[closeEndedAuctions] Failed to fetch bidders for auction ${doc.id}:`, bidderErr);
-        // Continue with other notifications — non-critical
       }
 
-      // Notify artist
       const artistId = auctionData.artistId as string | undefined;
       if (artistId) {
-        batchNotifyArtistAuctionClosed(
+        writer.write((batch) => batchNotifyArtistAuctionClosed(
           batch,
           artistId,
           auction,
           winnerId,
           winnerName,
           winningAmount
-        );
+        ));
+        await writer.flushIfNeeded();
       }
     }
     
-    await batch.commit();
+    await writer.commit();
     console.log(`Successfully closed ${snapshotDocs.length} auctions with notifications`);
     
   } catch (error) {
@@ -296,14 +345,12 @@ const ENDING_SOON_WINDOWS: [string, string, number, number][] = [
   ['24h',  '24 hours',    60 * 60 * 1000, 24  * 60 * 60 * 1000],
 ];
 
-export const auctionEndingSoon = functions.pubsub
+export const auctionEndingSoon = functions.region('asia-south1').pubsub
   .schedule('every 5 minutes')
   .onRun(async (context) => {
     const now = Date.now();
 
     try {
-      // Fetch all currently live/ending_soon auctions
-      // (same index used by getActiveAuctionsServer — no new index)
       const snap = await db
         .collection('auctions')
         .where('status', 'in', ['live', 'ending_soon'])
@@ -311,7 +358,7 @@ export const auctionEndingSoon = functions.pubsub
 
       if (snap.empty) return null;
 
-      const batch = db.batch();
+      const writer = new ChunkedBatchWriter();
       let notifCount = 0;
 
       for (const doc of snap.docs) {
@@ -319,7 +366,6 @@ export const auctionEndingSoon = functions.pubsub
         const endsAt = new Date(auctionData.endsAt).getTime();
         const timeRemainingMs = endsAt - now;
 
-        // Skip auctions that have already ended or start in the future
         if (timeRemainingMs <= 0) continue;
 
         const notifiedIntervals: string[] = auctionData.notifiedIntervals ?? [];
@@ -337,7 +383,7 @@ export const auctionEndingSoon = functions.pubsub
           bidCount: auctionData.totalBids ?? 0,
         };
 
-        const intervalsToFire: [string, string][] = []; // [key, label]
+        const intervalsToFire: [string, string][] = [];
 
         for (const [key, label, minWindow, maxWindow] of ENDING_SOON_WINDOWS) {
           if (
@@ -351,7 +397,6 @@ export const auctionEndingSoon = functions.pubsub
 
         if (intervalsToFire.length === 0) continue;
 
-        // Fetch participants once per auction (only if there are intervals to fire)
         let bidderIds: string[] = [];
         try {
           bidderIds = await getUniqueBidderIds(doc.id);
@@ -363,18 +408,24 @@ export const auctionEndingSoon = functions.pubsub
         if (bidderIds.length === 0) continue;
 
         for (const [key, label] of intervalsToFire) {
-          batchNotifyAuctionEndingSoon(batch, bidderIds, auction, label);
-          notifCount += bidderIds.length;
+          for (const bidderId of bidderIds) {
+            writer.write((batch) => batchNotifyAuctionEndingSoon(batch, [bidderId], auction, label));
+            notifCount++;
+            await writer.flushIfNeeded();
+          }
 
-          // Mark this interval as dispatched — prevents re-sending on next run
-          batch.update(doc.ref, {
-            notifiedIntervals: admin.firestore.FieldValue.arrayUnion(key),
+          writer.write((batch) => {
+            batch.update(doc.ref, {
+              notifiedIntervals: admin.firestore.FieldValue.arrayUnion(key),
+            });
           });
+          await writer.flushIfNeeded();
         }
       }
 
+      await writer.commit();
+
       if (notifCount > 0) {
-        await batch.commit();
         console.log(`[auctionEndingSoon] Dispatched ${notifCount} ending-soon notifications`);
       }
 

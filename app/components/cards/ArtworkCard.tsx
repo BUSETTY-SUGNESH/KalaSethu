@@ -66,7 +66,7 @@ export default function ArtworkCard({
         >
           <Icon name={isSaved ? "favorite" : "favorite_border"} size={20} />
         </button>
-        <Link href={`/artwork/${id}`}>
+        <Link href={`/artwork/${id}`} style={{ display: 'block', position: 'absolute', inset: 0 }}>
           <Image 
             src={imageUrl} 
             alt={title} 

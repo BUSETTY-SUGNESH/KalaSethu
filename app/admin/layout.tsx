@@ -18,7 +18,7 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    <AuthGuard requiredRole="admin">
+    <AuthGuard requiredRole="admin" roleRedirectTo="/dashboard">
       {/* Admin Header (Different from public header) */}
       <header className="site-header" style={{ backgroundColor: "var(--color-primary)" }}>
         <div className="container header-inner">

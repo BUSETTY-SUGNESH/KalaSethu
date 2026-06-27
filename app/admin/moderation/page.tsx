@@ -4,18 +4,22 @@ import { useState, useEffect } from "react";
 import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
 import { getPendingReports, resolveReport, moderateArtwork } from "@/lib/services/admin-service";
-import type { Report } from "@/app/types";
+import { getPendingArtworks } from "@/lib/services/artwork-service";
+import type { Report, Artwork } from "@/app/types";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useUIStore } from "@/lib/stores/ui-store";
 
 export default function ModerationPage() {
   const [items, setItems] = useState<Report[]>([]);
+  const [pendingArtworks, setPendingArtworks] = useState<Artwork[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingArtworks, setIsLoadingArtworks] = useState(true);
   const { user } = useAuthStore();
   const { addToast } = useUIStore();
 
   useEffect(() => {
     loadReports();
+    loadPendingArtworks();
   }, []);
 
   async function loadReports() {
@@ -28,6 +32,46 @@ export default function ModerationPage() {
       addToast({ type: 'error', title: 'Error', message: 'Could not load pending reports.' });
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function loadPendingArtworks() {
+    setIsLoadingArtworks(true);
+    try {
+      const res = await getPendingArtworks(50);
+      setPendingArtworks(res.data || []);
+    } catch (error) {
+      console.error("Failed to load pending artworks", error);
+      addToast({ type: 'error', title: 'Error', message: 'Could not load pending artworks.' });
+    } finally {
+      setIsLoadingArtworks(false);
+    }
+  }
+
+  async function handleArtworkAction(artworkId: string, action: 'approve' | 'reject') {
+    if (!user) {
+      addToast({ type: 'error', title: 'Error', message: 'Authentication required.' });
+      return;
+    }
+
+    try {
+      await moderateArtwork(
+        artworkId,
+        action === 'approve' ? 'approve' : 'reject',
+        action === 'approve' ? 'Approved by administration.' : 'Rejected by administration.'
+      );
+      setPendingArtworks(pendingArtworks.filter(a => a.id !== artworkId));
+      addToast({
+        type: 'success',
+        title: action === 'approve' ? 'Artwork Approved' : 'Artwork Rejected',
+        message: action === 'approve'
+          ? 'The artwork is now published in the marketplace.'
+          : 'The artwork was rejected.',
+      });
+    } catch (error: unknown) {
+      console.error("Artwork moderation error", error);
+      const message = error instanceof Error ? error.message : 'Action failed.';
+      addToast({ type: 'error', title: 'Error', message });
     }
   }
 
@@ -53,9 +97,10 @@ export default function ModerationPage() {
       }
       
       setItems(items.filter(item => item.id !== reportId));
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Moderation action error", error);
-      addToast({ type: 'error', title: 'Error', message: error.message || 'Action failed.' });
+      const message = error instanceof Error ? error.message : 'Action failed.';
+      addToast({ type: 'error', title: 'Error', message });
     }
   }
 
@@ -64,10 +109,59 @@ export default function ModerationPage() {
       <div className="flex justify-between items-end">
         <div>
           <h1 className="text-display-sm text-primary mb-8">Content Moderation</h1>
-          <p className="text-body-md text-on-surface-variant">Review reported artworks, comments, and user profiles.</p>
+          <p className="text-body-md text-on-surface-variant">Review reported content and pending artwork submissions.</p>
         </div>
       </div>
 
+      <div>
+        <h2 className="text-headline-sm text-primary mb-16">Pending Artwork Submissions</h2>
+        {isLoadingArtworks ? (
+          <div className="flex flex-col gap-16">
+            {[1, 2].map(i => (
+              <div key={i} className="skeleton" style={{ height: 64, borderRadius: 8 }} />
+            ))}
+          </div>
+        ) : (
+          <div className="bg-surface-container-lowest rounded-lg border border-outline-variant overflow-hidden mb-32">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-surface-container-low border-b border-outline-variant">
+                  <th className="p-16 text-label-sm uppercase text-on-surface-variant">Title</th>
+                  <th className="p-16 text-label-sm uppercase text-on-surface-variant">Artist</th>
+                  <th className="p-16 text-label-sm uppercase text-on-surface-variant">Category</th>
+                  <th className="p-16 text-label-sm uppercase text-on-surface-variant text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingArtworks.length > 0 ? (
+                  pendingArtworks.map(artwork => (
+                    <tr key={artwork.id} className="border-b border-outline-variant hover:bg-surface-container-low/20 transition-colors">
+                      <td className="p-16 font-bold text-primary">{artwork.title}</td>
+                      <td className="p-16 text-on-surface-variant">{artwork.artistName}</td>
+                      <td className="p-16 capitalize text-on-surface-variant">{artwork.category}</td>
+                      <td className="p-16 text-right">
+                        <div className="flex gap-8 justify-end">
+                          <Button variant="outline" size="sm" onClick={() => handleArtworkAction(artwork.id, 'reject')}>Reject</Button>
+                          <Button variant="primary" size="sm" onClick={() => handleArtworkAction(artwork.id, 'approve')}>Approve</Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="p-32 text-center text-body-md text-on-surface-variant italic">
+                      No pending artwork submissions.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h2 className="text-headline-sm text-primary mb-16">Reported Content</h2>
       {isLoading ? (
         <div className="flex flex-col gap-16">
           {[1, 2].map(i => (
@@ -128,6 +222,7 @@ export default function ModerationPage() {
           </table>
         </div>
       )}
+      </div>
     </div>
   );
 }

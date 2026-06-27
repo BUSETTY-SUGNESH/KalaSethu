@@ -92,7 +92,7 @@ export default function ArtworkUploadPage() {
         []
       );
       
-      const uploadedImages = await uploadMultipleFiles(files, `artworks/${newArtwork}`);
+      const uploadedImages = await uploadMultipleFiles(files, `artworks/${user.id}/${newArtwork}`);
       const images: ArtworkImage[] = uploadedImages.map((image, index) => ({
         id: image.fileName,
         url: image.downloadURL,
@@ -106,13 +106,21 @@ export default function ArtworkUploadPage() {
         images,
         thumbnailUrl: images[0]?.url || "",
       });
-      await publishArtwork(newArtwork);
+      const { status } = await publishArtwork(newArtwork);
 
-      addToast({ 
-        type: "success", 
-        title: "Artwork Published", 
-        message: "Your artwork is now visible in your portfolio and marketplace." 
-      });
+      if (status === 'published') {
+        addToast({
+          type: "success",
+          title: "Artwork Published",
+          message: "Your artwork is now visible in your portfolio and marketplace.",
+        });
+      } else {
+        addToast({
+          type: "success",
+          title: "Submitted for Review",
+          message: "Your artwork has been submitted and will appear in the marketplace once approved.",
+        });
+      }
       
       router.push("/dashboard/artist");
     } catch (error) {

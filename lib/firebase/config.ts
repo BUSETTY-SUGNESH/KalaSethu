@@ -3,6 +3,7 @@
 // ============================================================
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getFunctions } from 'firebase/functions';
+import { initAppCheck } from './app-check';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -21,6 +22,8 @@ if (getApps().length === 0) {
 } else {
   app = getApp();
 }
+
+initAppCheck(app);
 
 // Initialize Firebase Cloud Functions client
 const functions = getFunctions(app, 'asia-south1'); // Mumbai region for lowest latency from India

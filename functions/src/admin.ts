@@ -1,13 +1,17 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
+import { db } from './config';
+import { assertAppCheck } from './utils/app-check';
+import { assertRateLimit } from './utils/rate-limit';
 
-const db = admin.firestore();
-
-export const verifyArtist = functions.https.onCall(async (data, context) => {
+export const verifyArtist = functions.region('asia-south1').https.onCall(async (data, context) => {
   // Only admins can call this
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
   }
+
+  assertAppCheck(context);
+  await assertRateLimit(context.auth.uid, 'verifyArtist');
   
   // Verify admin status
   const userDoc = await db.collection("users").doc(context.auth.uid).get();
@@ -73,7 +77,7 @@ export const verifyArtist = functions.https.onCall(async (data, context) => {
 });
 
 // A scheduled function to aggregate analytics for the admin dashboard
-export const aggregateAnalytics = functions.pubsub.schedule('every 24 hours').onRun(async (context) => {
+export const aggregateAnalytics = functions.region('asia-south1').pubsub.schedule('every 24 hours').onRun(async (context) => {
   try {
     const [usersSnap, artworksSnap, ordersSnap] = await Promise.all([
       db.collection("users").count().get(),

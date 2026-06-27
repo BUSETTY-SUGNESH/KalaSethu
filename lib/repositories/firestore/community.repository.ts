@@ -25,6 +25,8 @@ import {
   type Unsubscribe,
   type QueryConstraint,
 } from '@/lib/firebase/firestore';
+import { functions } from '@/lib/firebase/config';
+import { httpsCallable } from 'firebase/functions';
 import type { Post, Comment, Follow, Bookmark, PaginatedResult } from '@/app/types';
 
 export const communityRepository = {
@@ -160,24 +162,13 @@ export const communityRepository = {
     followingId: string,
     followingName: string
   ): Promise<void> {
-    const now = new Date().toISOString();
-    await setDoc(
-      doc(subcollections.userFollowing(followerId), followingId),
-      { userId: followingId, userName: followingName, createdAt: now }
-    );
-    await setDoc(
-      doc(subcollections.userFollowers(followingId), followerId),
-      { userId: followerId, userName: followerName, createdAt: now }
-    );
-    await updateDoc(docRef.user(followerId), { followingCount: increment(1) });
-    await updateDoc(docRef.user(followingId), { followerCount: increment(1) });
+    const followFn = httpsCallable(functions, 'followUser');
+    await followFn({ followerName, followingId, followingName });
   },
 
   async unfollow(followerId: string, followingId: string): Promise<void> {
-    await deleteDoc(doc(subcollections.userFollowing(followerId), followingId));
-    await deleteDoc(doc(subcollections.userFollowers(followingId), followerId));
-    await updateDoc(docRef.user(followerId), { followingCount: increment(-1) });
-    await updateDoc(docRef.user(followingId), { followerCount: increment(-1) });
+    const unfollowFn = httpsCallable(functions, 'unfollowUser');
+    await unfollowFn({ followingId });
   },
 
   async getFollowers(userId: string, max: number = 50): Promise<Follow[]> {

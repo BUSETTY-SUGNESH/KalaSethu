@@ -3,6 +3,7 @@
 // ============================================================
 import { create } from 'zustand';
 import type { User, UserRole } from '@/app/types';
+import { clearCachedUserProfile } from '@/lib/auth/profile-cache';
 
 interface AuthState {
   // State
@@ -40,13 +41,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setLoading: (isLoading) => set({ isLoading }),
 
-  clearAuth: () =>
+  clearAuth: () => {
+    clearCachedUserProfile();
     set({
       user: null,
       firebaseUser: null,
       isAuthenticated: false,
       isLoading: false,
-    }),
+    });
+  },
 
   hasRole: (role) => {
     const { user } = get();
@@ -59,7 +62,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       moderator: 4,
       admin: 5,
     };
-    return roleHierarchy[user.role] >= roleHierarchy[role];
+    const effectiveRole =
+      (user.role as string) === 'collector' ? 'user' : user.role;
+    return roleHierarchy[effectiveRole] >= roleHierarchy[role];
   },
 
   isArtist: () => {

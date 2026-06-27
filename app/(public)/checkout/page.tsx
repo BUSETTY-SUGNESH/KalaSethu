@@ -19,6 +19,45 @@ declare global {
   }
 }
 
+// Razorpay does not publish SRI hashes for checkout.js — load once via deduplicated loader
+const RAZORPAY_SCRIPT_ID = 'razorpay-checkout-js';
+let razorpayLoadPromise: Promise<boolean> | null = null;
+
+async function loadRazorpay(): Promise<boolean> {
+  if (typeof window !== 'undefined' && window.Razorpay) {
+    return true;
+  }
+
+  if (razorpayLoadPromise) {
+    return razorpayLoadPromise;
+  }
+
+  razorpayLoadPromise = new Promise((resolve) => {
+    const existing = document.getElementById(RAZORPAY_SCRIPT_ID);
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true));
+      existing.addEventListener('error', () => resolve(false));
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = RAZORPAY_SCRIPT_ID;
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => {
+      razorpayLoadPromise = null;
+      resolve(false);
+    };
+    document.body.appendChild(script);
+  });
+
+  return razorpayLoadPromise;
+}
+
+function isValidPincode(pincode: string): boolean {
+  return /^[0-9]{6}$/.test(pincode);
+}
+
 export default function CheckoutPage() {
   const router = useRouter();
   const { items, totalAmount, clearCart, itemCount } = useCartStore();
@@ -96,26 +135,17 @@ export default function CheckoutPage() {
     }
   };
 
-  async function loadRazorpay() {
-    return new Promise((resolve) => {
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.onload = () => {
-        resolve(true);
-      };
-      script.onerror = () => {
-        resolve(false);
-      };
-      document.body.appendChild(script);
-    });
-  }
-
   async function handlePayment(e: React.FormEvent) {
     e.preventDefault();
+
+    if (!isValidPincode(shippingAddress.pincode)) {
+      addToast({ type: 'error', title: 'Invalid Pincode', message: 'Please enter a valid 6-digit Indian pincode.' });
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
-      // 1. Load Razorpay Script
       const res = await loadRazorpay();
       if (!res) {
         addToast({ type: 'error', title: 'Payment Error', message: 'Razorpay SDK failed to load. Please check your connection.' });
@@ -123,7 +153,6 @@ export default function CheckoutPage() {
         return;
       }
 
-      // If user selected "new" address and checked "Save to Profile"
       if (selectedAddressId === "new" && saveToProfile && user) {
         try {
           await createUserAddress(user.id, {
@@ -138,60 +167,79 @@ export default function CheckoutPage() {
           });
         } catch (addrErr) {
           console.error("Failed to save address to profile:", addrErr);
-          // Don't block payment if only profile address saving fails
         }
       }
 
-      // 2. Create Order via Cloud Function
-      const orderParams = await createOrder(totalAmount);
+      const checkoutItems = items.map((item) => ({
+        artworkId: item.artworkId,
+        quantity: item.quantity || 1,
+      }));
 
-      // 3. Configure Razorpay
+      const orderParams = await createOrder(checkoutItems, shippingAddress, totalAmount);
+
+      if (orderParams.serverTotal !== totalAmount) {
+        addToast({
+          type: 'info',
+          title: 'Price Updated',
+          message: 'Artwork prices were refreshed. You will be charged the current total.',
+        });
+      }
+
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-        amount: orderParams.amount, // in paise
+        amount: orderParams.amount,
         currency: orderParams.currency,
         name: "KalaSetu",
         description: "Purchase of Authentic Heritage Art",
         order_id: orderParams.id,
-        handler: async function (response: any) {
+        handler: async function (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) {
           try {
-            // 4. Verify Payment via Cloud Function
-            const orderDetails = {
-              totalAmount,
-              shippingAddress,
-              items: items.map(item => ({
-                artworkId: item.artworkId,
-                artworkTitle: item.artworkTitle,
-                price: item.price,
-                artistId: item.artistId,
-                artistName: item.artistName,
-                artworkImageUrl: item.artworkImageUrl,
-                quantity: item.quantity || 1
-              }))
-            };
-
             const verification = await verifyPayment(
               response.razorpay_order_id,
               response.razorpay_payment_id,
               response.razorpay_signature,
-              orderDetails
+              { shippingAddress }
             );
             
             if (verification.success) {
+              const orderIds =
+                verification.orderIds ??
+                (verification.orderId ? [verification.orderId] : []);
+
               addToast({ 
                 type: 'success', 
                 title: 'Payment Successful', 
-                message: 'Your order has been placed successfully.' 
+                message: orderIds.length > 1
+                  ? `${orderIds.length} orders placed successfully.`
+                  : 'Your order has been placed successfully.',
               });
               clearCart();
-              router.push(`/dashboard/orders/${verification.orderId || ''}`);
+              router.push(
+                orderIds.length === 1
+                  ? `/dashboard/orders/${orderIds[0]}`
+                  : '/dashboard/orders'
+              );
+            } else if (verification.refunded) {
+              addToast({
+                type: 'info',
+                title: 'Payment Refunded',
+                message: verification.error || 'Your payment was refunded because the item(s) are no longer available.',
+              });
+              router.push('/marketplace');
             } else {
               throw new Error(verification.error || "Verification failed");
             }
           } catch (err) {
             console.error("Verification error:", err);
             addToast({ type: 'error', title: 'Verification Failed', message: 'There was an issue confirming your payment. Please contact support.' });
+          } finally {
+            setIsProcessing(false);
           }
+        },
+        modal: {
+          ondismiss: function () {
+            setIsProcessing(false);
+          },
         },
         prefill: {
           name: user?.displayName || shippingAddress.name,
@@ -205,8 +253,9 @@ export default function CheckoutPage() {
 
       const paymentObject = new window.Razorpay(options);
       
-      paymentObject.on('payment.failed', function (response: any) {
+      paymentObject.on('payment.failed', function (response: { error: { description: string } }) {
         addToast({ type: 'error', title: 'Payment Failed', message: response.error.description });
+        setIsProcessing(false);
       });
 
       paymentObject.open();
@@ -214,7 +263,6 @@ export default function CheckoutPage() {
     } catch (error) {
       console.error("Payment setup error:", error);
       addToast({ type: 'error', title: 'Error', message: 'Could not initialize payment gateway.' });
-    } finally {
       setIsProcessing(false);
     }
   }
@@ -302,8 +350,12 @@ export default function CheckoutPage() {
                     type="text" 
                     className="form-input" 
                     value={shippingAddress.pincode}
-                    onChange={(e) => setShippingAddress({...shippingAddress, pincode: e.target.value})}
+                    onChange={(e) => setShippingAddress({...shippingAddress, pincode: e.target.value.replace(/\D/g, '').slice(0, 6)})}
                     disabled={selectedAddressId !== "new"}
+                    inputMode="numeric"
+                    maxLength={6}
+                    pattern="[0-9]{6}"
+                    title="Enter a valid 6-digit Indian pincode"
                     required 
                   />
                 </div>

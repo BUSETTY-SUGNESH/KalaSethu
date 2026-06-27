@@ -15,6 +15,8 @@ interface AuthGuardProps {
   requiredRole?: UserRole;
   /** Redirect URL when not authenticated */
   redirectTo?: string;
+  /** Redirect URL when authenticated but lacking required role */
+  roleRedirectTo?: string;
   /** If true, shows loading skeleton instead of redirecting while auth loads */
   showLoading?: boolean;
   /** Custom fallback component while loading */
@@ -40,6 +42,7 @@ export default function AuthGuard({
   children,
   requiredRole = 'user',
   redirectTo = '/login',
+  roleRedirectTo = '/',
   showLoading = true,
   fallback,
 }: AuthGuardProps) {
@@ -53,9 +56,9 @@ export default function AuthGuard({
 
     if (!isLoading && isAuthenticated && requiredRole && !hasRole(requiredRole)) {
       // User is authenticated but doesn't have the required role
-      router.push('/dashboard');
+      router.push(roleRedirectTo);
     }
-  }, [isLoading, isAuthenticated, requiredRole, hasRole, router, redirectTo]);
+  }, [isLoading, isAuthenticated, requiredRole, hasRole, router, redirectTo, roleRedirectTo]);
 
   // Still loading auth state
   if (isLoading) {

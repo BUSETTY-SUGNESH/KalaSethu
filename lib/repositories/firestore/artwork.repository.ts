@@ -20,6 +20,17 @@ import {
 } from '@/lib/firebase/firestore';
 import type { Artwork, ArtworkStatus, PaginatedResult } from '@/app/types';
 
+function getSearchTermVariants(term: string): string[] {
+  const trimmed = term.trim();
+  if (!trimmed) return [];
+  const titleCase = trimmed
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+  const lower = trimmed.toLowerCase();
+  return [...new Set([trimmed, titleCase, lower])];
+}
+
 export const artworkRepository = {
   async findById(id: string): Promise<Artwork | null> {
     const snap = await getDoc(docRef.artwork(id));
@@ -136,53 +147,41 @@ export const artworkRepository = {
   },
 
   async searchArtworks(term: string, max: number = 30): Promise<Artwork[]> {
-    if (!term) return [];
-    
-    // Capitalize the term to match Title Case typically used in KalaSetu
-    const formattedTerm = term.split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
+    const variants = getSearchTermVariants(term);
+    if (variants.length === 0) return [];
 
-    // Query 1: Title Prefix
-    const qTitle = query(
-      collections.artworks(),
-      where('status', '==', 'published'),
-      where('title', '>=', formattedTerm),
-      where('title', '<=', formattedTerm + '\uf8ff'),
-      limit(max)
-    );
-
-    // Query 2: Artist Name Prefix
-    const qArtist = query(
-      collections.artworks(),
-      where('status', '==', 'published'),
-      where('artistName', '>=', formattedTerm),
-      where('artistName', '<=', formattedTerm + '\uf8ff'),
-      limit(max)
-    );
-
-    // Query 3: Category Exact Match
-    const qCategory = query(
-      collections.artworks(),
-      where('status', '==', 'published'),
-      where('category', '==', formattedTerm),
-      limit(max)
-    );
-
-    // Execute in parallel
-    const [titleSnap, artistSnap, categorySnap] = await Promise.all([
-      getDocs(qTitle),
-      getDocs(qArtist),
-      getDocs(qCategory),
+    const queries = variants.flatMap((variant) => [
+      query(
+        collections.artworks(),
+        where('status', '==', 'published'),
+        where('title', '>=', variant),
+        where('title', '<=', variant + '\uf8ff'),
+        limit(max)
+      ),
+      query(
+        collections.artworks(),
+        where('status', '==', 'published'),
+        where('artistName', '>=', variant),
+        where('artistName', '<=', variant + '\uf8ff'),
+        limit(max)
+      ),
+      query(
+        collections.artworks(),
+        where('status', '==', 'published'),
+        where('category', '==', variant),
+        limit(max)
+      ),
     ]);
 
-    // Merge and deduplicate by ID
+    const snapshots = await Promise.all(queries.map((q) => getDocs(q)));
+
     const resultsMap = new Map<string, Artwork>();
-    
-    [...titleSnap.docs, ...artistSnap.docs, ...categorySnap.docs].forEach(d => {
-      if (!resultsMap.has(d.id)) {
-        resultsMap.set(d.id, { id: d.id, ...d.data() } as Artwork);
-      }
+    snapshots.forEach((snap) => {
+      snap.docs.forEach((d) => {
+        if (!resultsMap.has(d.id)) {
+          resultsMap.set(d.id, { id: d.id, ...d.data() } as Artwork);
+        }
+      });
     });
 
     return Array.from(resultsMap.values()).slice(0, max);

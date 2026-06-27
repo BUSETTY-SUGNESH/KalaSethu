@@ -468,40 +468,44 @@ export default function MarketplaceClient({
             <div className="category-grid">
               <button 
                 className="category-item span-2 span-2-row text-left"
+                style={{ position: "relative" }}
                 onClick={() => { setActiveCategory("Chola Bronzes"); setSearchQuery(""); window.scrollTo({top: 0, behavior: 'smooth'}); }}
                 aria-label="Filter by Chola Bronzes"
               >
-                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKpT1QStD4QUN9YJvPDowhRfY4TjHRgp14IKqTk-dZPf2QVxjhCYF9Do1TBcz9kYIn25JvmAmgMFN4SiTxz-bfiSaKSqY1jZo1SuUkxPUJ6l9P-9Dm_mRR3HsGLvnppZPcalC7fwYjMPSysIjKXjym_Tw38G3BbEDWKTPLy9TFYrwQHataEMqeki-Net3suHauERIeca6ra8pSls3jpNvn9jl3MGYKzoBJJ3wpU2bcZKdffDylUtqXPcAncnx8sFJ5RrX4wOd3iRu5" alt="Bronzes" fill sizes="(max-width: 768px) 100vw, 50vw" />
+                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKpT1QStD4QUN9YJvPDowhRfY4TjHRgp14IKqTk-dZPf2QVxjhCYF9Do1TBcz9kYIn25JvmAmgMFN4SiTxz-bfiSaKSqY1jZo1SuUkxPUJ6l9P-9Dm_mRR3HsGLvnppZPcalC7fwYjMPSysIjKXjym_Tw38G3BbEDWKTPLy9TFYrwQHataEMqeki-Net3suHauERIeca6ra8pSls3jpNvn9jl3MGYKzoBJJ3wpU2bcZKdffDylUtqXPcAncnx8sFJ5RrX4wOd3iRu5" alt="Bronzes" fill priority sizes="(max-width: 768px) 100vw, 50vw" />
                 <div className="category-overlay">
                   <h3 className="text-headline-md text-on-primary">Chola Bronzes</h3>
                 </div>
               </button>
               <button 
                 className="category-item text-left"
+                style={{ position: "relative" }}
                 onClick={() => { setActiveCategory("Mithila"); setSearchQuery(""); window.scrollTo({top: 0, behavior: 'smooth'}); }}
                 aria-label="Filter by Mithila"
               >
-                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuAwJlulKZjpPmd-6a2h5G6AbOOFyYz7zE9LlAwyGcRChBYoAPL9R9mjt-C0525alfJk4yEXwpUhhR_IpWw7z95hBGpGXn7oQ5ai1oIHCBJvoHQS5txRfWMGGRpf0ZTowVPizUw8d6mZ0mRC6L5LBfdUgGtILI4HYDrj8NeB1NRMG30hgZc2VL1z7YW0t2AIm_xiiGp4geGfeyayLm7fkhLan2roWFJdI1Z2o3_yXgbwrqWQSOpuUEJOTxgMpHqU8N5jHG6OUQkjbku_" alt="Paintings" fill sizes="(max-width: 768px) 50vw, 25vw" />
+                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuAwJlulKZjpPmd-6a2h5G6AbOOFyYz7zE9LlAwyGcRChBYoAPL9R9mjt-C0525alfJk4yEXwpUhhR_IpWw7z95hBGpGXn7oQ5ai1oIHCBJvoHQS5txRfWMGGRpf0ZTowVPizUw8d6mZ0mRC6L5LBfdUgGtILI4HYDrj8NeB1NRMG30hgZc2VL1z7YW0t2AIm_xiiGp4geGfeyayLm7fkhLan2roWFJdI1Z2o3_yXgbwrqWQSOpuUEJOTxgMpHqU8N5jHG6OUQkjbku_" alt="Paintings" fill priority sizes="(max-width: 768px) 50vw, 25vw" />
                 <div className="category-overlay">
                   <h3 className="text-title-md text-on-primary">Mithila</h3>
                 </div>
               </button>
               <button 
                 className="category-item text-left"
+                style={{ position: "relative" }}
                 onClick={() => { setActiveCategory("Textiles"); setSearchQuery(""); window.scrollTo({top: 0, behavior: 'smooth'}); }}
                 aria-label="Filter by Textiles"
               >
-                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuDfV8vS5h5VOyr5bH1vMXxhFlMIctImbzswi0rpFLIxUlOlvN6PEWJ4_L-XbD_nLEzkUM1TTOVEFoXiPg72403DPokjRM-L0_HBNz4URAwWbgdK8YN_6R7LtODUqdscYBsiwYOFTjMh7QGmg6T8i05hAlWcXldwNHJHu0XT-BLj15I0EMibTx0rrZulL2vZBAnZKbcYYUVrqeRFH-pWKxAbeh68aft4agkEoWNyqDqKVtvgR9DPhQTFd4oPNBiEIYX3WFSi8fzExVi5" alt="Textiles" fill sizes="(max-width: 768px) 50vw, 25vw" />
+                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuDfV8vS5h5VOyr5bH1vMXxhFlMIctImbzswi0rpFLIxUlOlvN6PEWJ4_L-XbD_nLEzkUM1TTOVEFoXiPg72403DPokjRM-L0_HBNz4URAwWbgdK8YN_6R7LtODUqdscYBsiwYOFTjMh7QGmg6T8i05hAlWcXldwNHJHu0XT-BLj15I0EMibTx0rrZulL2vZBAnZKbcYYUVrqeRFH-pWKxAbeh68aft4agkEoWNyqDqKVtvgR9DPhQTFd4oPNBiEIYX3WFSi8fzExVi5" alt="Textiles" fill priority sizes="(max-width: 768px) 50vw, 25vw" />
                 <div className="category-overlay">
                   <h3 className="text-title-md text-on-primary">Textiles</h3>
                 </div>
               </button>
               <button 
                 className="category-item span-2 text-left"
+                style={{ position: "relative" }}
                 onClick={() => { setActiveCategory("Mysore Woodcraft"); setSearchQuery(""); window.scrollTo({top: 0, behavior: 'smooth'}); }}
                 aria-label="Filter by Mysore Woodcraft"
               >
-                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9Nl4KAeLTkOxgSkftwoUkycNLcgMiXyRcyOC7cDH0unfRLptrT3zB7nQtdTQy8EUNLcJ5LX-HtWx3-P4QSMgZ_N0CXsbyNRvlmIjh6bTlCImv5GfUQBJi9TXzpJIx0LRPBaMbE9ufV26-po5glJ1KCm8L0L7_b2AGG_hRJYLnkKbSumOD8uv36xjarsOb3UVUO2_Wa9wsb0yQeg4aogK8cupTL7ZVZN8JcZRY_vxKJrfxrt7riLYWOgVYmSXFi3j3Fa2XolbH9bFm" alt="Woodcraft" fill sizes="(max-width: 768px) 100vw, 50vw" />
+                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9Nl4KAeLTkOxgSkftwoUkycNLcgMiXyRcyOC7cDH0unfRLptrT3zB7nQtdTQy8EUNLcJ5LX-HtWx3-P4QSMgZ_N0CXsbyNRvlmIjh6bTlCImv5GfUQBJi9TXzpJIx0LRPBaMbE9ufV26-po5glJ1KCm8L0L7_b2AGG_hRJYLnkKbSumOD8uv36xjarsOb3UVUO2_Wa9wsb0yQeg4aogK8cupTL7ZVZN8JcZRY_vxKJrfxrt7riLYWOgVYmSXFi3j3Fa2XolbH9bFm" alt="Woodcraft" fill priority sizes="(max-width: 768px) 100vw, 50vw" />
                 <div className="category-overlay">
                   <h3 className="text-headline-md text-on-primary">Mysore Woodcraft</h3>
                 </div>

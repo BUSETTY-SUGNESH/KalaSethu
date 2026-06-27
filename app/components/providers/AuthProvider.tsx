@@ -7,6 +7,8 @@
 import { useEffect, type ReactNode } from 'react';
 import { onAuthStateChanged } from '@/lib/firebase/auth';
 import { getUserProfile, createUserProfile, updateLastLogin } from '@/lib/services/user-service';
+import { cacheUserProfile, getCachedUserProfile } from '@/lib/auth/profile-cache';
+import { rejectIfBanned } from '@/lib/auth/banned-user';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useCartStore } from '@/lib/stores/cart-store';
 
@@ -16,12 +18,10 @@ interface AuthProviderProps {
 
 export default function AuthProvider({ children }: AuthProviderProps) {
   const { setUser, setFirebaseUser, setLoading, clearAuth } = useAuthStore();
-  const hydrateCart = useCartStore((s) => s.hydrateFromStorage);
+  const isLoading = useAuthStore((s) => s.isLoading);
+  const setCartUser = useCartStore((s) => s.setCartUser);
 
   useEffect(() => {
-    // Hydrate cart from localStorage on mount
-    hydrateCart();
-
     const unsubscribe = onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
         // Store Firebase user basic info
@@ -47,45 +47,51 @@ export default function AuthProvider({ children }: AuthProviderProps) {
           }
 
           if (profile) {
+            if (await rejectIfBanned(profile)) {
+              setCartUser(null);
+              clearAuth();
+              setLoading(false);
+              return;
+            }
+
             // Update email verification status
             if (firebaseUser.emailVerified !== profile.isEmailVerified) {
               profile.isEmailVerified = firebaseUser.emailVerified;
             }
             setUser(profile);
+            setCartUser(profile.id);
+            cacheUserProfile(firebaseUser.uid, profile);
             // Update last login timestamp
             updateLastLogin(firebaseUser.uid).catch(() => {
               // Non-critical — silently ignore
             });
           }
         } catch (error: any) {
-          // Graceful degradation if Firestore is unreachable (e.g., database not created in console)
           if (error.message?.toLowerCase().includes('offline') || error.code === 'unavailable') {
-            console.warn("Firestore is unreachable (offline). Proceeding with limited auth state based on Firebase Auth.");
-            setUser({
-              id: firebaseUser.uid,
-              displayName: firebaseUser.displayName || 'User',
-              email: firebaseUser.email || '',
-              role: 'user',
-              avatarUrl: firebaseUser.photoURL || undefined,
-              isVerified: false,
-              isEmailVerified: firebaseUser.emailVerified,
-              isPhoneVerified: false,
-              isBanned: false,
-              artworkCount: 0,
-              followerCount: 0,
-              followingCount: 0,
-              salesCount: 0,
-              totalRevenue: 0,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              lastLoginAt: new Date().toISOString(),
-            });
+            const cached = getCachedUserProfile(firebaseUser.uid);
+            if (cached) {
+              if (await rejectIfBanned(cached)) {
+                setCartUser(null);
+                clearAuth();
+                setLoading(false);
+                return;
+              }
+              console.warn('Firestore unreachable — using cached profile for auth state.');
+              setUser(cached);
+              setCartUser(cached.id);
+            } else {
+              console.warn('Firestore unreachable and no cached profile — denying auth until online.');
+              setCartUser(null);
+              clearAuth();
+            }
           } else {
             console.error('Error loading user profile:', error);
+            setCartUser(null);
             clearAuth();
           }
         }
       } else {
+        setCartUser(null);
         clearAuth();
       }
 
@@ -93,7 +99,11 @@ export default function AuthProvider({ children }: AuthProviderProps) {
     });
 
     return () => unsubscribe();
-  }, [setUser, setFirebaseUser, setLoading, clearAuth, hydrateCart]);
+  }, [setUser, setFirebaseUser, setLoading, clearAuth, setCartUser]);
+
+  if (isLoading) {
+    return null;
+  }
 
   return <>{children}</>;
 }

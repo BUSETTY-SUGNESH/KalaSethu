@@ -1,9 +1,8 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
+import { db } from './config';
 
-const db = admin.firestore();
-
-export const onUserCreated = functions.auth.user().onCreate(async (user) => {
+export const onUserCreated = functions.region('asia-south1').auth.user().onCreate(async (user) => {
   const { uid, email, displayName, photoURL } = user;
   
   try {
@@ -13,13 +12,19 @@ export const onUserCreated = functions.auth.user().onCreate(async (user) => {
       email: email || "",
       displayName: displayName || "New User",
       avatarUrl: photoURL || "",
-      role: "collector",
+      role: "user",
       bio: "",
       isVerified: false,
+      isEmailVerified: false,
+      isPhoneVerified: false,
+      isBanned: false,
+      artworkCount: 0,
+      followerCount: 0,
+      followingCount: 0,
+      salesCount: 0,
+      totalRevenue: 0,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      followerCount: 0,
-      followingCount: 0
     });
     
     // Add welcome notification
@@ -38,7 +43,7 @@ export const onUserCreated = functions.auth.user().onCreate(async (user) => {
   }
 });
 
-export const onUserDeleted = functions.auth.user().onDelete(async (user) => {
+export const onUserDeleted = functions.region('asia-south1').auth.user().onDelete(async (user) => {
   const { uid } = user;
   
   try {

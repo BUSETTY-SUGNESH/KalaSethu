@@ -1,31 +1,35 @@
 import * as functions from "firebase-functions/v1";
-import * as admin from "firebase-admin";
-
-const db = admin.firestore();
+import { db } from './config';
 
 // Cleanup old notifications (e.g., older than 30 days) to save space
-export const cleanupOldNotifications = functions.pubsub.schedule('every 24 hours').onRun(async (context) => {
+export const cleanupOldNotifications = functions.region('asia-south1').pubsub.schedule('every 24 hours').onRun(async (context) => {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   
   try {
-    // This requires a group collection query or looping through users
-    const usersSnapshot = await db.collection("users").get();
-    
     let deletedCount = 0;
-    
-    for (const userDoc of usersSnapshot.docs) {
-      const oldNotifsSnapshot = await db.collection(`users/${userDoc.id}/notifications`)
-        .where("createdAt", "<", thirtyDaysAgo)
+    let hasMore = true;
+
+    while (hasMore) {
+      const oldNotifsSnapshot = await db.collectionGroup('notifications')
+        .where('createdAt', '<', thirtyDaysAgo)
+        .limit(500)
         .get();
-        
-      if (!oldNotifsSnapshot.empty) {
-        const batch = db.batch();
-        oldNotifsSnapshot.docs.forEach(doc => {
-          batch.delete(doc.ref);
-          deletedCount++;
-        });
-        await batch.commit();
+
+      if (oldNotifsSnapshot.empty) {
+        hasMore = false;
+        break;
+      }
+
+      const batch = db.batch();
+      oldNotifsSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        deletedCount++;
+      });
+      await batch.commit();
+
+      if (oldNotifsSnapshot.size < 500) {
+        hasMore = false;
       }
     }
     

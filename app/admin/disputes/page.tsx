@@ -40,7 +40,7 @@ export default function DisputesPage() {
         : 'Dispute resolved: Claim dismissed by administrator.';
         
       await updateOrderStatus(orderId, nextStatus, note, 'admin', {
-        paymentStatus: action === 'refund' ? 'refunded' : 'settled'
+        paymentStatus: action === 'refund' ? 'refunded' : 'completed'
       });
 
       setDisputes(disputes.filter(d => d.id !== orderId));

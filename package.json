@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "migrate:collector-roles": "node scripts/migrate-collector-roles.mjs",
+    "migrate:collector-roles:dry-run": "node scripts/migrate-collector-roles.mjs --dry-run"
   },
   "dependencies": {
     "date-fns": "^4.4.0",

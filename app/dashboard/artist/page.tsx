@@ -60,6 +60,14 @@ export default function ArtistStudioPage() {
           <h1 className="text-headline-lg text-primary">Your Workspace</h1>
         </div>
         <div className="flex gap-12">
+          <Button
+            variant="outline"
+            icon="local_shipping"
+            iconPosition="left"
+            href="/dashboard/artist/orders"
+          >
+            Sales Orders
+          </Button>
           <Button 
             variant="outline" 
             icon="visibility" 

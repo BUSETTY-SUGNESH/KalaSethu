@@ -45,10 +45,11 @@ export async function uploadFile(
   const fileName = `${uniqueId}_${sanitizedName}`;
   const fullPath = `${basePath}/${fileName}`;
   const storageRef = ref(storage, fullPath);
+  const contentType = file.type || inferImageContentType(file.name);
 
   return new Promise((resolve, reject) => {
     const uploadTask = uploadBytesResumable(storageRef, file, {
-      contentType: file.type,
+      contentType,
       customMetadata: {
         originalName: file.name,
         uploadedAt: new Date().toISOString(),
@@ -98,14 +99,15 @@ export async function uploadMultipleFiles(
 
 /**
  * Upload artwork images to a structured path.
- * Path: artworks/{artworkId}/{filename}
+ * Path: artworks/{userId}/{artworkId}/{filename}
  */
 export async function uploadArtworkImages(
+  userId: string,
   artworkId: string,
   files: File[],
   onFileProgress?: (index: number, progress: UploadProgress) => void
 ): Promise<UploadResult[]> {
-  return uploadMultipleFiles(files, `artworks/${artworkId}`, onFileProgress);
+  return uploadMultipleFiles(files, `artworks/${userId}/${artworkId}`, onFileProgress);
 }
 
 /**
@@ -161,6 +163,7 @@ export async function getFileURL(fullPath: string): Promise<string> {
 // Validation constants
 export const ALLOWED_IMAGE_TYPES = [
   'image/jpeg',
+  'image/jpg',
   'image/png',
   'image/webp',
   'image/avif',
@@ -168,11 +171,29 @@ export const ALLOWED_IMAGE_TYPES = [
 export const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 export const MAX_DOC_SIZE = 5 * 1024 * 1024; // 5MB
 
+function inferImageContentType(fileName: string): string {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'webp':
+      return 'image/webp';
+    case 'avif':
+      return 'image/avif';
+    default:
+      return 'image/jpeg';
+  }
+}
+
 /**
  * Validate an image file before upload.
  */
 export function validateImageFile(file: File): string | null {
-  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+  const contentType = file.type || inferImageContentType(file.name);
+  if (!ALLOWED_IMAGE_TYPES.includes(contentType)) {
     return 'Invalid file type. Allowed: JPEG, PNG, WebP, AVIF.';
   }
   if (file.size > MAX_IMAGE_SIZE) {

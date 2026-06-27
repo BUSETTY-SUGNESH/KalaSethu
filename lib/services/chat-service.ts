@@ -72,13 +72,7 @@ export async function sendMessage(
     isDeleted: false,
   };
 
-  const room = await chatRepository.findRoom(chatRoomId);
-  if (room) {
-    // Unread counts are handled in the repository logic if we move it there, 
-    // but right now chatRepository.sendMessage handles the room update.
-    return chatRepository.sendMessage(chatRoomId, message);
-  }
-  throw new Error("Room not found");
+  return chatRepository.sendMessage(chatRoomId, message);
 }
 
 // --- Subscribe to Messages (real-time) ---

@@ -3,15 +3,24 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Icon from "@/app/components/ui/Icon";
+import Button from "@/app/components/ui/Button";
 import { getBuyerOrders } from "@/lib/services/order-service";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import type { Order } from "@/app/types";
+import type { DocumentSnapshot } from "@/lib/firebase/firestore";
 import { format } from "date-fns";
+import {
+  ARTWORK_PLACEHOLDER,
+  getOrderStatusPillClass,
+} from "@/lib/utils/order-display";
 
 export default function OrdersPage() {
   const { user } = useAuthStore();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null);
 
   useEffect(() => {
     async function loadOrders() {
@@ -19,6 +28,8 @@ export default function OrdersPage() {
       try {
         const result = await getBuyerOrders(user.id, 20);
         setOrders(result.data);
+        setLastDoc(result.lastDoc ?? null);
+        setHasMore(result.hasMore);
       } catch (error) {
         console.error("Failed to load orders", error);
       } finally {
@@ -27,6 +38,21 @@ export default function OrdersPage() {
     }
     loadOrders();
   }, [user]);
+
+  async function handleLoadMore() {
+    if (!user || !hasMore || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const result = await getBuyerOrders(user.id, 20, lastDoc);
+      setOrders((prev) => [...prev, ...result.data]);
+      setLastDoc(result.lastDoc ?? null);
+      setHasMore(result.hasMore);
+    } catch (error) {
+      console.error("Failed to load more orders", error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -84,7 +110,7 @@ export default function OrdersPage() {
                   {order.items.map((item, idx) => (
                     <li key={idx} className="flex gap-24">
                       <div style={{ width: 80, height: 80, borderRadius: "var(--radius-sm)", overflow: "hidden", flexShrink: 0 }}>
-                        <img src={item.artworkImageUrl || "https://placehold.co/100x100"} alt={item.artworkTitle} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <img src={item.artworkImageUrl || ARTWORK_PLACEHOLDER} alt={item.artworkTitle} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       </div>
                       <div className="flex flex-col grow justify-center">
                         <Link href={`/artwork/${item.artworkId}`} className="text-headline-sm text-primary hover:underline">
@@ -93,7 +119,7 @@ export default function OrdersPage() {
                         <span className="text-body-md text-on-surface-variant mt-4">₹{item.price.toLocaleString('en-IN')}</span>
                       </div>
                       <div className="flex flex-col items-end justify-center">
-                        <span className={`status-pill ${order.status}`}>
+                        <span className={`status-pill ${getOrderStatusPillClass(order.status)}`}>
                           {order.status.replace('_', ' ')}
                         </span>
                         {order.status === 'shipped' && order.trackingNumber && (
@@ -108,6 +134,18 @@ export default function OrdersPage() {
               </div>
             </div>
           ))}
+
+          {hasMore && (
+            <div className="flex justify-center" style={{ marginTop: 8 }}>
+              <Button
+                variant="secondary"
+                onClick={handleLoadMore}
+                disabled={isLoadingMore}
+              >
+                {isLoadingMore ? 'Loading...' : 'Load More Orders'}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -221,7 +221,7 @@ export default function AuctionDetailsClient({
           <div className="flex flex-col gap-16">
             {/* position:relative + display:block on Link required for next/image fill */}
             <div className="bg-surface-container-low" style={{ width: "100%", aspectRatio: "1/1", borderRadius: "var(--radius-md)", overflow: "hidden", border: "1px solid rgba(196, 199, 199, 0.2)", position: "relative" }}>
-              <Link href={`/artwork/${auction.artworkId}`} style={{ display: "block", width: "100%", height: "100%" }}>
+              <Link href={`/artwork/${auction.artworkId}`} style={{ display: "block", width: "100%", height: "100%", position: "relative" }}>
                 <Image
                   src={auction.artworkImageUrl || "https://placehold.co/800x800"}
                   alt={auction.artworkTitle}

@@ -87,6 +87,7 @@ export default function NotificationPanel() {
       case 'order_placed':
       case 'order_shipped':
       case 'order_delivered':
+      case 'payment_received':
         return 'local_shipping';
       case 'new_comment':
       case 'new_like':

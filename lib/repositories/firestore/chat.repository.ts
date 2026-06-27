@@ -18,6 +18,8 @@ import {
   onSnapshot,
   type Unsubscribe,
 } from '@/lib/firebase/firestore';
+import { functions } from '@/lib/firebase/config';
+import { httpsCallable } from 'firebase/functions';
 import type { ChatRoom, Message } from '@/app/types';
 
 export const chatRepository = {
@@ -92,15 +94,18 @@ export const chatRepository = {
   },
 
   async sendMessage(roomId: string, message: Omit<Message, 'id'>): Promise<string> {
-    const ref = await addDoc(subcollections.chatMessages(roomId), message);
-    // Update room last message metadata
-    await updateDoc(docRef.chatRoom(roomId), {
-      lastMessage: message.content,
-      lastMessageAt: message.createdAt,
-      lastMessageBy: message.senderId,
-      updatedAt: new Date().toISOString(),
+    const sendFn = httpsCallable(functions, 'sendChatMessage');
+    const result = await sendFn({
+      chatRoomId: roomId,
+      senderId: message.senderId,
+      senderName: message.senderName,
+      type: message.type,
+      content: message.content,
+      mediaUrl: message.mediaUrl,
+      artworkId: message.artworkId,
     });
-    return ref.id;
+    const data = result.data as { success: boolean; messageId: string };
+    return data.messageId;
   },
 
   async markAsRead(roomId: string, userId: string): Promise<void> {

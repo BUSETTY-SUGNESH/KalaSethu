@@ -36,14 +36,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.aggregateAnalytics = exports.verifyArtist = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
-const db = admin.firestore();
-exports.verifyArtist = functions.https.onCall(async (data, context) => {
+const config_1 = require("./config");
+const app_check_1 = require("./utils/app-check");
+const rate_limit_1 = require("./utils/rate-limit");
+exports.verifyArtist = functions.region('asia-south1').https.onCall(async (data, context) => {
     // Only admins can call this
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
     }
+    (0, app_check_1.assertAppCheck)(context);
+    await (0, rate_limit_1.assertRateLimit)(context.auth.uid, 'verifyArtist');
     // Verify admin status
-    const userDoc = await db.collection("users").doc(context.auth.uid).get();
+    const userDoc = await config_1.db.collection("users").doc(context.auth.uid).get();
     const userData = userDoc.data();
     if (userData?.role !== 'admin' && userData?.role !== 'moderator') {
         throw new functions.https.HttpsError('permission-denied', 'Must be an admin or moderator');
@@ -55,14 +59,14 @@ exports.verifyArtist = functions.https.onCall(async (data, context) => {
     try {
         const role = isVerified ? 'verified_artist' : 'artist';
         const status = isVerified ? 'approved' : 'rejected';
-        await db.collection("users").doc(targetUserId).update({
+        await config_1.db.collection("users").doc(targetUserId).update({
             role,
             isVerified,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
         // Update the verification application document status
         if (verificationId) {
-            await db.collection("artistVerifications").doc(verificationId).update({
+            await config_1.db.collection("artistVerifications").doc(verificationId).update({
                 status,
                 reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -70,7 +74,7 @@ exports.verifyArtist = functions.https.onCall(async (data, context) => {
             });
         }
         else {
-            const verifSnap = await db.collection("artistVerifications")
+            const verifSnap = await config_1.db.collection("artistVerifications")
                 .where("artistId", "==", targetUserId)
                 .where("status", "==", "pending")
                 .limit(1)
@@ -85,7 +89,7 @@ exports.verifyArtist = functions.https.onCall(async (data, context) => {
             }
         }
         // Notify the user
-        await db.collection("users").doc(targetUserId).collection("notifications").add({
+        await config_1.db.collection("users").doc(targetUserId).collection("notifications").add({
             userId: targetUserId,
             title: "Verification Status Updated",
             message: isVerified ? "Congratulations! You are now a Verified Artisan." : "Your verification status has been updated.",
@@ -101,14 +105,14 @@ exports.verifyArtist = functions.https.onCall(async (data, context) => {
     }
 });
 // A scheduled function to aggregate analytics for the admin dashboard
-exports.aggregateAnalytics = functions.pubsub.schedule('every 24 hours').onRun(async (context) => {
+exports.aggregateAnalytics = functions.region('asia-south1').pubsub.schedule('every 24 hours').onRun(async (context) => {
     try {
         const [usersSnap, artworksSnap, ordersSnap] = await Promise.all([
-            db.collection("users").count().get(),
-            db.collection("artworks").count().get(),
-            db.collection("orders").count().get()
+            config_1.db.collection("users").count().get(),
+            config_1.db.collection("artworks").count().get(),
+            config_1.db.collection("orders").count().get()
         ]);
-        await db.collection("analytics").doc("platform_stats").set({
+        await config_1.db.collection("analytics").doc("platform_stats").set({
             totalUsers: usersSnap.data().count,
             totalArtworks: artworksSnap.data().count,
             totalOrders: ordersSnap.data().count,

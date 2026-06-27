@@ -3,6 +3,9 @@
 // Business logic layer bridging UI to Repository layer.
 // ============================================================
 import { artworkRepository } from '@/lib/repositories';
+import { deleteFile, deleteDirectory } from '@/lib/firebase/storage';
+import { functions } from '@/lib/firebase/config';
+import { httpsCallable } from 'firebase/functions';
 import type {
   Artwork,
   ArtworkFormData,
@@ -63,9 +66,14 @@ export async function updateArtworkStatus(
   return artworkRepository.setStatus(artworkId, status);
 }
 
-// --- Publish Artwork ---
-export async function publishArtwork(artworkId: string): Promise<void> {
-  return artworkRepository.setStatus(artworkId, 'published');
+// --- Publish Artwork (via Cloud Function for status moderation) ---
+export async function publishArtwork(
+  artworkId: string
+): Promise<{ status: 'published' | 'pending' }> {
+  const submitFn = httpsCallable(functions, 'submitArtworkForReview');
+  const result = await submitFn({ artworkId });
+  const data = result.data as { success: boolean; status: 'published' | 'pending' };
+  return { status: data.status };
 }
 
 // --- Archive Artwork ---
@@ -75,7 +83,15 @@ export async function archiveArtwork(artworkId: string): Promise<void> {
 
 // --- Delete Artwork ---
 export async function deleteArtwork(artworkId: string): Promise<void> {
-  return artworkRepository.delete(artworkId);
+  const artwork = await artworkRepository.findById(artworkId);
+  if (artwork) {
+    const paths = artwork.images?.map((img) => img.storagePath).filter(Boolean) ?? [];
+    await Promise.all(paths.map((p) => deleteFile(p).catch(() => {})));
+    if (artwork.artistId) {
+      await deleteDirectory(`artworks/${artwork.artistId}/${artworkId}`).catch(() => {});
+    }
+  }
+  await artworkRepository.delete(artworkId);
 }
 
 // --- Get Artworks by Artist ---

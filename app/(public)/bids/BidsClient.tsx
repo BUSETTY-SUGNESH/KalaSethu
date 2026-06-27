@@ -213,7 +213,7 @@ export default function BidsClient({ initialAuctions }: { initialAuctions: Aucti
         <div className="flex gap-24">
           {/* position:relative required for next/image fill mode */}
           <div style={{ width: 180, height: 180, borderRadius: "var(--radius-md)", overflow: "hidden", flexShrink: 0, position: "relative" }}>
-            <Link href={`/bids/${auction.id}`} style={{ display: "block", width: "100%", height: "100%" }}>
+            <Link href={`/bids/${auction.id}`} style={{ display: "block", width: "100%", height: "100%", position: "relative" }}>
               <Image
                 src={auction.artworkImageUrl || "https://placehold.co/400x400"}
                 alt={auction.artworkTitle}

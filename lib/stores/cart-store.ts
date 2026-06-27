@@ -4,9 +4,17 @@
 import { create } from 'zustand';
 import type { CartItem } from '@/app/types';
 
+const CART_KEY_PREFIX = 'kalasetu_cart';
+const LEGACY_CART_KEY = 'kalasetu_cart';
+
+function getCartKey(userId: string): string {
+  return `${CART_KEY_PREFIX}_${userId}`;
+}
+
 interface CartState {
   items: CartItem[];
   isOpen: boolean;
+  currentUserId: string | null;
   // Computed
   totalAmount: number;
   itemCount: number;
@@ -17,7 +25,8 @@ interface CartState {
   clearCart: () => void;
   toggleCart: () => void;
   setCartOpen: (open: boolean) => void;
-  hydrateFromStorage: () => void;
+  hydrateFromStorage: (userId: string) => void;
+  setCartUser: (userId: string | null) => void;
 }
 
 function calculateTotals(items: CartItem[]) {
@@ -27,20 +36,42 @@ function calculateTotals(items: CartItem[]) {
   };
 }
 
-function persistCart(items: CartItem[]) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('kalasetu_cart', JSON.stringify(items));
+function persistCart(items: CartItem[], userId: string | null) {
+  if (typeof window === 'undefined' || !userId) return;
+  localStorage.setItem(getCartKey(userId), JSON.stringify(items));
+}
+
+function loadCartFromStorage(userId: string): CartItem[] | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const userKey = getCartKey(userId);
+    let stored = localStorage.getItem(userKey);
+    if (!stored) {
+      const legacy = localStorage.getItem(LEGACY_CART_KEY);
+      if (legacy) {
+        localStorage.setItem(userKey, legacy);
+        localStorage.removeItem(LEGACY_CART_KEY);
+        stored = legacy;
+      }
+    }
+    if (stored) {
+      return JSON.parse(stored) as CartItem[];
+    }
+  } catch {
+    // Silently fail — corrupt localStorage
   }
+  return null;
 }
 
 export const useCartStore = create<CartState>((set, get) => ({
   items: [],
   isOpen: false,
+  currentUserId: null,
   totalAmount: 0,
   itemCount: 0,
 
   addItem: (item) => {
-    const { items } = get();
+    const { items, currentUserId } = get();
     const existing = items.find((i) => i.artworkId === item.artworkId);
 
     let newItems: CartItem[];
@@ -57,14 +88,14 @@ export const useCartStore = create<CartState>((set, get) => ({
       ];
     }
 
-    persistCart(newItems);
+    persistCart(newItems, currentUserId);
     set({ items: newItems, ...calculateTotals(newItems) });
   },
 
   removeItem: (artworkId) => {
-    const { items } = get();
+    const { items, currentUserId } = get();
     const newItems = items.filter((i) => i.artworkId !== artworkId);
-    persistCart(newItems);
+    persistCart(newItems, currentUserId);
     set({ items: newItems, ...calculateTotals(newItems) });
   },
 
@@ -73,33 +104,38 @@ export const useCartStore = create<CartState>((set, get) => ({
       get().removeItem(artworkId);
       return;
     }
-    const { items } = get();
+    const { items, currentUserId } = get();
     const newItems = items.map((i) =>
       i.artworkId === artworkId ? { ...i, quantity } : i
     );
-    persistCart(newItems);
+    persistCart(newItems, currentUserId);
     set({ items: newItems, ...calculateTotals(newItems) });
   },
 
   clearCart: () => {
-    persistCart([]);
+    const { currentUserId } = get();
+    persistCart([], currentUserId);
     set({ items: [], totalAmount: 0, itemCount: 0 });
   },
 
   toggleCart: () => set((state) => ({ isOpen: !state.isOpen })),
   setCartOpen: (open) => set({ isOpen: open }),
 
-  hydrateFromStorage: () => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('kalasetu_cart');
-        if (stored) {
-          const items = JSON.parse(stored) as CartItem[];
-          set({ items, ...calculateTotals(items) });
-        }
-      } catch {
-        // Silently fail — corrupt localStorage
-      }
+  hydrateFromStorage: (userId) => {
+    const items = loadCartFromStorage(userId);
+    if (items) {
+      set({ items, ...calculateTotals(items) });
+    } else {
+      set({ items: [], totalAmount: 0, itemCount: 0 });
+    }
+  },
+
+  setCartUser: (userId) => {
+    if (userId) {
+      set({ currentUserId: userId });
+      get().hydrateFromStorage(userId);
+    } else {
+      set({ currentUserId: null, items: [], totalAmount: 0, itemCount: 0 });
     }
   },
 }));

@@ -10,7 +10,7 @@ import type {
   Bid,
   PaginatedResult,
 } from '@/app/types';
-import { type DocumentSnapshot, type Unsubscribe, subcollections, addDoc } from '@/lib/firebase/firestore';
+import { type DocumentSnapshot, type Unsubscribe } from '@/lib/firebase/firestore';
 import { functions } from '@/lib/firebase/config';
 import { httpsCallable } from 'firebase/functions';
 

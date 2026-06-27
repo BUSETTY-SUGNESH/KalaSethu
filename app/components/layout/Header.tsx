@@ -22,7 +22,7 @@ export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
   
-  const { user, isAuthenticated, isArtist } = useAuthStore();
+  const { user, isAuthenticated, isArtist, isAdmin } = useAuthStore();
   const { itemCount } = useCartStore();
   const { 
     unreadNotificationCount, 
@@ -178,6 +178,12 @@ export default function Header() {
                       <p className="text-caption text-on-surface-variant truncate">{user?.email}</p>
                     </div>
                     <div className="flex flex-col py-8">
+                      {isAdmin() && (
+                        <Link href="/admin" className="notification-item" onClick={() => setDropdownOpen(false)}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>admin_panel_settings</span>
+                          Admin Console
+                        </Link>
+                      )}
                       <Link href={`/dashboard${isArtist() ? '/artist' : '/collector'}`} className="notification-item" onClick={() => setDropdownOpen(false)}>
                         <span className="material-symbols-outlined" style={{ fontSize: 20 }}>dashboard</span>
                         Dashboard

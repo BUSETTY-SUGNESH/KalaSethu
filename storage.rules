@@ -17,7 +17,7 @@ service firebase.storage {
 
     // Helper: Check if file is an image
     function isImage() {
-      return request.resource.contentType.matches('image/(jpeg|png|webp|avif)');
+      return request.resource.contentType.matches('image/.*');
     }
 
     // Helper: Check if file is a document
@@ -26,24 +26,63 @@ service firebase.storage {
         || request.resource.contentType.matches('image/(jpeg|png)');
     }
 
+    // App Check — append && hasAppCheck() when ENFORCE phase is active
+    function hasAppCheck() {
+      return request.app != null;
+    }
+
+    // Firestore cross-reference helpers
+    function artworkArtistId(artworkId) {
+      return firestore.get(/databases/(default)/documents/artworks/$(artworkId)).data.artistId;
+    }
+
+    function eventOrganizerId(eventId) {
+      return firestore.get(/databases/(default)/documents/events/$(eventId)).data.organizerId;
+    }
+
+    function isChatParticipant(roomId) {
+      return request.auth.uid in
+        firestore.get(/databases/(default)/documents/chatRooms/$(roomId)).data.participants;
+    }
+
     // ── Artwork Images ────────────────────────────────────
-    // Path: artworks/{artworkId}/{fileName}
-    match /artworks/{artworkId}/{fileName} {
-      // Anyone can read published artwork images
+    // Path: artworks/{userId}/{artworkId}/{fileName}
+    match /artworks/{userId}/{artworkId}/{fileName} {
       allow read: if true;
 
-      // Only authenticated users can upload (artist check done at app level)
       allow create: if isAuthenticated()
+        && request.auth.uid == userId
         && isImage()
         && isUnderMaxSize(10);
 
-      // Owner can update their images
       allow update: if isAuthenticated()
+        && request.auth.uid == userId
         && isImage()
         && isUnderMaxSize(10);
 
-      // Owner can delete
-      allow delete: if isAuthenticated();
+      allow delete: if isAuthenticated()
+        && request.auth.uid == userId;
+    }
+
+    // Legacy path: artworks/{artworkId}/{fileName}
+    match /artworks/{artworkId}/{fileName} {
+      allow read: if true;
+
+      allow create: if isAuthenticated()
+        && firestore.exists(/databases/(default)/documents/artworks/$(artworkId))
+        && request.auth.uid == artworkArtistId(artworkId)
+        && isImage()
+        && isUnderMaxSize(10);
+
+      allow update: if isAuthenticated()
+        && firestore.exists(/databases/(default)/documents/artworks/$(artworkId))
+        && request.auth.uid == artworkArtistId(artworkId)
+        && isImage()
+        && isUnderMaxSize(10);
+
+      allow delete: if isAuthenticated()
+        && firestore.exists(/databases/(default)/documents/artworks/$(artworkId))
+        && request.auth.uid == artworkArtistId(artworkId);
     }
 
     // ── User Avatars & Profile Images ─────────────────────
@@ -103,9 +142,11 @@ service firebase.storage {
     // ── Chat Media ────────────────────────────────────────
     // Path: chats/{roomId}/{fileName}
     match /chats/{roomId}/{fileName} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated()
+        && isChatParticipant(roomId);
 
       allow create: if isAuthenticated()
+        && isChatParticipant(roomId)
         && isImage()
         && isUnderMaxSize(10);
 
@@ -118,10 +159,17 @@ service firebase.storage {
       allow read: if true;
 
       allow create: if isAuthenticated()
+        && request.auth.uid == eventOrganizerId(eventId)
         && isImage()
         && isUnderMaxSize(10);
 
-      allow delete: if isAuthenticated();
+      allow update: if isAuthenticated()
+        && request.auth.uid == eventOrganizerId(eventId)
+        && isImage()
+        && isUnderMaxSize(10);
+
+      allow delete: if isAuthenticated()
+        && request.auth.uid == eventOrganizerId(eventId);
     }
 
     // Deny everything else

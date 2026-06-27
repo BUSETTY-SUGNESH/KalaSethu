@@ -25,17 +25,23 @@ import {
 } from '@/lib/firebase/firestore';
 import type { User, UserProfile, UserRole, UserAddress, PaginatedResult } from '@/app/types';
 
+/** Map legacy Firestore role values to the frontend UserRole union */
+function normalizeUser<T extends { role: string }>(doc: T): T & { role: UserRole } {
+  const role = doc.role === 'collector' ? 'user' : doc.role;
+  return { ...doc, role } as T & { role: UserRole };
+}
+
 export const userRepository = {
   /** Fetch a single user by UID */
   async findById(uid: string): Promise<User | null> {
     const snap = await getDoc(docRef.user(uid));
     if (!snap.exists()) return null;
-    return { id: snap.id, ...snap.data() } as User;
+    return normalizeUser({ id: snap.id, ...snap.data() } as User);
   },
 
   /** Create a new user document (called after Firebase Auth signup) */
   async create(uid: string, data: Omit<User, 'id'>): Promise<void> {
-    await setDoc(docRef.user(uid), data);
+    await setDoc(docRef.user(uid), data, { merge: true });
   },
 
   /** Update a user document (partial) */
@@ -72,7 +78,7 @@ export const userRepository = {
       limit(max)
     );
     const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }) as User);
+    return snap.docs.map(d => normalizeUser({ id: d.id, ...d.data() } as User));
   },
 
   /** Get users by role with pagination */
@@ -81,12 +87,16 @@ export const userRepository = {
     pageSize: number = 20,
     lastDoc?: DocumentSnapshot | null
   ): Promise<PaginatedResult<UserProfile>> {
-    return paginatedQuery<UserProfile>(
+    const result = await paginatedQuery<UserProfile>(
       collections.users(),
       [where('role', '==', role), orderBy('createdAt', 'desc')],
       pageSize,
       lastDoc
     );
+    return {
+      ...result,
+      data: result.data.map((item) => normalizeUser(item)),
+    };
   },
 
   /** Get featured/verified artists by follower count */
@@ -99,7 +109,7 @@ export const userRepository = {
       limit(count)
     );
     const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }) as UserProfile);
+    return snap.docs.map(d => normalizeUser({ id: d.id, ...d.data() } as UserProfile));
   },
 
   /** Check if a user document exists */
@@ -113,12 +123,16 @@ export const userRepository = {
     pageSize: number = 20,
     lastDoc?: DocumentSnapshot | null
   ): Promise<PaginatedResult<User>> {
-    return paginatedQuery<User>(
+    const result = await paginatedQuery<User>(
       collections.users(),
       [orderBy('createdAt', 'desc')],
       pageSize,
       lastDoc
     );
+    return {
+      ...result,
+      data: result.data.map((item) => normalizeUser(item)),
+    };
   },
 
   /** Ban/Unban user (admin only action) */
