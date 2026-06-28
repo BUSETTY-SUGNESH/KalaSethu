@@ -163,6 +163,8 @@ export interface Auction {
   winnerId?: string;
   winnerName?: string;
   winningBid?: number;
+  lastBidderId?: string;
+  lastBidderName?: string;
   // Metadata
   createdAt: string;
   updatedAt: string;

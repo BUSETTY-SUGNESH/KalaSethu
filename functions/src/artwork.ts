@@ -7,6 +7,7 @@ import { userRepository } from './repositories/user.repository';
 import { assertAppCheck } from './utils/app-check';
 import { assertRateLimit } from './utils/rate-limit';
 import { ChunkedBatchWriter } from './utils/batch-commit';
+import { FIRESTORE_TRIGGER_REGION } from './constants/regions';
 
 function isKeywordMaintenanceWrite(
   prevData: admin.firestore.DocumentData | undefined,
@@ -21,7 +22,7 @@ function isKeywordMaintenanceWrite(
   );
 }
 
-export const onArtworkWritten = functions.region('asia-south1').firestore
+export const onArtworkWritten = functions.region(FIRESTORE_TRIGGER_REGION).firestore
   .document('artworks/{artworkId}')
   .onWrite(async (change, context) => {
     const artworkId = context.params.artworkId;

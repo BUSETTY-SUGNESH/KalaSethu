@@ -40,8 +40,9 @@ const config_1 = require("./config");
 const app_check_1 = require("./utils/app-check");
 const rate_limit_1 = require("./utils/rate-limit");
 const schema_validation_1 = require("./utils/schema-validation");
+const regions_1 = require("./constants/regions");
 // Aggregation for comments count on posts
-exports.onCommentAdded = functions.region('asia-south1').firestore
+exports.onCommentAdded = functions.region(regions_1.FIRESTORE_TRIGGER_REGION).firestore
     .document('posts/{postId}/comments/{commentId}')
     .onCreate(async (snap, context) => {
     const postId = context.params.postId;
@@ -55,7 +56,7 @@ exports.onCommentAdded = functions.region('asia-south1').firestore
         console.error(`Failed to update comment count for post ${postId}`, error);
     }
 });
-exports.onCommentRemoved = functions.region('asia-south1').firestore
+exports.onCommentRemoved = functions.region(regions_1.FIRESTORE_TRIGGER_REGION).firestore
     .document('posts/{postId}/comments/{commentId}')
     .onDelete(async (snap, context) => {
     const postId = context.params.postId;

@@ -98,6 +98,21 @@ service cloud.firestore {
           || isValidString(request.resource.data.title, 1, 200));
     }
 
+    // Any visitor may bump viewCount on published artworks (increment-only).
+    function isPublishedViewCountUpdate() {
+      return resource.data.status == 'published'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount'])
+        && request.resource.data.viewCount is int
+        && request.resource.data.viewCount == resource.data.viewCount + 1;
+    }
+
+    function isPublicArtworkRead() {
+      return resource.data.status == 'published'
+        || (resource.data.listingType == 'auction'
+          && resource.data.status != 'draft'
+          && resource.data.status != 'archived');
+    }
+
     function isValidAuctionCreate() {
       return request.resource.data.artistId == request.auth.uid
         && isValidString(request.resource.data.artworkId, 1, 128)
@@ -216,18 +231,20 @@ service cloud.firestore {
     // ── Artworks ──────────────────────────────────────────
 
     match /artworks/{artworkId} {
-      // Published artworks are public; drafts visible to owner and admin
-      allow read: if resource.data.status == 'published'
+      // Published artworks are public; auction-listed works visible to bidders
+      allow read: if isPublicArtworkRead()
         || isOwner(resource.data.artistId)
         || isAdmin();
 
       // Artists can create artworks (draft only)
       allow create: if isArtist() && isValidArtworkCreate();
 
-      // Owner can update their artworks; admin can update any
+      // Owner can update their artworks; admin can update any; public viewCount bump
       allow update: if (isOwner(resource.data.artistId)
           && isValidClientStatusChange()
-          && isValidArtworkOwnerUpdate()) || isAdmin();
+          && isValidArtworkOwnerUpdate())
+        || isAdmin()
+        || isPublishedViewCountUpdate();
 
       // Owner can delete drafts; admin can delete any
       allow delete: if (isOwner(resource.data.artistId)
@@ -260,11 +277,18 @@ service cloud.firestore {
       }
     }
 
-    // ── Bids ──────────────────────────────────────────────
+    // ── Bids (collection-group + top-level) ───────────────
+
+    // Collection-group queries: user may read only their own bids
+    match /{path=**}/bids/{bidId} {
+      allow read: if isAuthenticated()
+        && resource.data.bidderId == request.auth.uid;
+    }
 
     match /bids/{bidId} {
-      // Authenticated users can read bids
-      allow read: if isAuthenticated();
+      // Owner-only read for top-level bid documents
+      allow read: if isAuthenticated()
+        && resource.data.bidderId == request.auth.uid;
 
       // Bids are ONLY created via Cloud Functions (server-side validation)
       allow create: if false;

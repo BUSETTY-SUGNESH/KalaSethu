@@ -42,6 +42,7 @@ const user_repository_1 = require("./repositories/user.repository");
 const app_check_1 = require("./utils/app-check");
 const rate_limit_1 = require("./utils/rate-limit");
 const batch_commit_1 = require("./utils/batch-commit");
+const regions_1 = require("./constants/regions");
 function isKeywordMaintenanceWrite(prevData, data) {
     if (!prevData || !data)
         return false;
@@ -50,7 +51,7 @@ function isKeywordMaintenanceWrite(prevData, data) {
         prevData.status === data.status &&
         prevData.artistId === data.artistId);
 }
-exports.onArtworkWritten = functions.region('asia-south1').firestore
+exports.onArtworkWritten = functions.region(regions_1.FIRESTORE_TRIGGER_REGION).firestore
     .document('artworks/{artworkId}')
     .onWrite(async (change, context) => {
     const artworkId = context.params.artworkId;

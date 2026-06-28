@@ -1,35 +1,39 @@
 'use client';
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
-import type { Auction } from "@/app/types";
+import type { Auction, AuctionStatus } from "@/app/types";
 import { formatDistanceToNow } from "date-fns";
 import { useAuthStore } from "@/lib/stores/auth-store";
-import { getUserBidAnalytics, getUserBids, getAuctionsByIds } from "@/lib/services/auction-service";
+import {
+  getUserBidAnalytics,
+  getUserBids,
+  getAuctionsByIds,
+  EMPTY_BID_ANALYTICS,
+  normalizeBidAnalytics,
+  BID_CHANGED_EVENT,
+  type BidAnalytics,
+} from "@/lib/services/auction-service";
 import SellerBidsClient from "./SellerBidsClient";
 
 export default function BidsClient({ initialAuctions }: { initialAuctions: Auction[] }) {
   const [auctions, setAuctions] = useState<Auction[]>(initialAuctions);
-  const { user, isArtist } = useAuthStore();
+  const { user, isArtist, firebaseUser, isLoading: authLoading } = useAuthStore();
 
   // isArtist check moved to the bottom to avoid breaking React hook rules
 
-  const [analytics, setAnalytics] = useState<{
-    totalParticipated: number;
-    activeBids: number;
-    wonItems: number;
-    winRate: number;
-  } | null>(null);
+  const [analytics, setAnalytics] = useState<BidAnalytics | null>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
 
   // Issue 2.2: My Active Bids tracking state
   const [activeTab, setActiveTab] = useState<'all' | 'my_bids'>('all');
   const [myBidsData, setMyBidsData] = useState<{ auction: Auction, userMaxBid: number }[]>([]);
   const [loadingMyBids, setLoadingMyBids] = useState(false);
-  const [hasFetchedMyBids, setHasFetchedMyBids] = useState(false);
+  const [myBidsError, setMyBidsError] = useState<string | null>(null);
+  const myBidsInitialLoad = useRef(true);
 
   // Tab indicator state
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -58,11 +62,14 @@ export default function BidsClient({ initialAuctions }: { initialAuctions: Aucti
   }, [activeTab, user]);
 
   useEffect(() => {
-    if (!user) {
+    if (authLoading) return;
+
+    if (!user || !firebaseUser) {
+      setAnalytics(null);
       setLoadingAnalytics(false);
       return;
     }
-    
+
     if (user.role === 'artist' || user.role === 'verified_artist') {
       setLoadingAnalytics(false);
       return;
@@ -70,48 +77,88 @@ export default function BidsClient({ initialAuctions }: { initialAuctions: Aucti
 
     setLoadingAnalytics(true);
     getUserBidAnalytics()
-      .then(setAnalytics)
-      .catch(err => console.error("Failed to load bid analytics:", err))
+      .then((data) => setAnalytics(normalizeBidAnalytics(data)))
+      .catch(() => setAnalytics({ ...EMPTY_BID_ANALYTICS }))
       .finally(() => setLoadingAnalytics(false));
-  }, [user]);
+  }, [user, firebaseUser, authLoading]);
 
-  // Fetch My Bids logic
-  useEffect(() => {
-    if (activeTab === 'my_bids' && !hasFetchedMyBids && user) {
-      setLoadingMyBids(true);
-      // Fetch up to 50 recent bids by the user
-      getUserBids(user.id, 50).then(async (result) => {
-        const bids = result.data;
-        
-        // Group by auctionId to find the user's max bid per auction
-        const auctionBidMap = new Map<string, number>();
-        bids.forEach(b => {
-          const existingMax = auctionBidMap.get(b.auctionId) || 0;
-          if (b.amount > existingMax) {
-            auctionBidMap.set(b.auctionId, b.amount);
-          }
-        });
-        
-        const auctionIds = Array.from(auctionBidMap.keys());
-        if (auctionIds.length > 0) {
-          const fetchedAuctions = await getAuctionsByIds(auctionIds);
-          // Sort ending soonest first
-          fetchedAuctions.sort((a, b) => new Date(a.endsAt).getTime() - new Date(b.endsAt).getTime());
-          
-          setMyBidsData(fetchedAuctions.map(a => ({
-            auction: a,
-            userMaxBid: auctionBidMap.get(a.id) || 0
-          })));
-        }
-        
-        setHasFetchedMyBids(true);
-        setLoadingMyBids(false);
-      }).catch(err => {
-        console.error("Failed to load my bids:", err);
-        setLoadingMyBids(false);
-      });
+  const refreshAnalytics = useCallback(() => {
+    if (!user || !firebaseUser || user.role === 'artist' || user.role === 'verified_artist') {
+      return;
     }
-  }, [activeTab, hasFetchedMyBids, user]);
+    getUserBidAnalytics()
+      .then((data) => setAnalytics(normalizeBidAnalytics(data)))
+      .catch(() => setAnalytics({ ...EMPTY_BID_ANALYTICS }));
+  }, [user, firebaseUser]);
+
+  const loadMyBids = useCallback(async () => {
+    if (!user || !firebaseUser) return;
+
+    const showSpinner = myBidsInitialLoad.current;
+    if (showSpinner) setLoadingMyBids(true);
+    setMyBidsError(null);
+
+    try {
+      const result = await getUserBids(user.id, 50);
+      const bids = result.data.filter((b) => b.auctionId);
+
+      const auctionBidMap = new Map<string, number>();
+      bids.forEach((b) => {
+        const existingMax = auctionBidMap.get(b.auctionId) || 0;
+        if (b.amount > existingMax) {
+          auctionBidMap.set(b.auctionId, b.amount);
+        }
+      });
+
+      const auctionIds = Array.from(auctionBidMap.keys());
+      if (auctionIds.length > 0) {
+        const fetchedAuctions = await getAuctionsByIds(auctionIds);
+        fetchedAuctions.sort((a, b) => new Date(a.endsAt).getTime() - new Date(b.endsAt).getTime());
+
+        setMyBidsData(fetchedAuctions.map((a) => ({
+          auction: a,
+          userMaxBid: auctionBidMap.get(a.id) || 0,
+        })));
+      } else {
+        setMyBidsData([]);
+      }
+
+      myBidsInitialLoad.current = false;
+    } catch {
+      setMyBidsError('Unable to load your bids. Please try again.');
+      setMyBidsData([]);
+    } finally {
+      setLoadingMyBids(false);
+    }
+  }, [user, firebaseUser]);
+
+  // Reset my-bids state when account changes
+  useEffect(() => {
+    myBidsInitialLoad.current = true;
+    setMyBidsData([]);
+    setMyBidsError(null);
+  }, [firebaseUser?.uid]);
+
+  // Fetch My Bids when tab is active (re-fetch on each visit)
+  useEffect(() => {
+    if (authLoading || activeTab !== 'my_bids') return;
+    loadMyBids();
+  }, [activeTab, authLoading, loadMyBids]);
+
+  // Refresh my bids and analytics after a successful bid elsewhere on the site
+  useEffect(() => {
+    const onBidChanged = () => {
+      refreshAnalytics();
+      if (activeTab === 'my_bids') {
+        loadMyBids();
+      } else {
+        myBidsInitialLoad.current = true;
+      }
+    };
+
+    window.addEventListener(BID_CHANGED_EVENT, onBidChanged);
+    return () => window.removeEventListener(BID_CHANGED_EVENT, onBidChanged);
+  }, [activeTab, loadMyBids, refreshAnalytics]);
 
   const getBidStatus = (auction: Auction, userMaxBid: number, userId: string) => {
     const isEnded = auction.status === 'ended' || new Date(auction.endsAt).getTime() < Date.now();
@@ -199,66 +246,149 @@ export default function BidsClient({ initialAuctions }: { initialAuctions: Aucti
 
   const isCustomer = user && (user.role === 'guest' || user.role === 'user');
 
-  const renderAuctionCard = (auction: Auction, userMaxBid?: number) => {
-    const isMyBids = activeTab === 'my_bids' && userMaxBid !== undefined;
-    const status = isMyBids && user ? getBidStatus(auction, userMaxBid, user.id) : null;
+  const getAuctionStatusBadge = (auction: Auction) => {
+    const isEnded =
+      auction.status === 'ended' ||
+      auction.status === 'completed' ||
+      auction.status === 'cancelled' ||
+      new Date(auction.endsAt).getTime() < Date.now();
+
+    if (isEnded) {
+      return { label: 'Ended', pulse: false, dotClass: 'active' as const };
+    }
+
+    const statusMap: Record<AuctionStatus, { label: string; pulse: boolean; dotClass: 'pulse' | 'active' }> = {
+      ending_soon: { label: 'Ending Soon', pulse: true, dotClass: 'pulse' },
+      scheduled: { label: 'Scheduled', pulse: false, dotClass: 'active' },
+      live: { label: 'Live', pulse: true, dotClass: 'pulse' },
+      ended: { label: 'Ended', pulse: false, dotClass: 'active' },
+      cancelled: { label: 'Cancelled', pulse: false, dotClass: 'active' },
+      completed: { label: 'Completed', pulse: false, dotClass: 'active' },
+    };
+
+    return statusMap[auction.status] ?? { label: 'Live', pulse: true, dotClass: 'pulse' as const };
+  };
+
+  const formatTimeRemaining = (auction: Auction) => {
+    if (new Date(auction.endsAt).getTime() < Date.now()) {
+      return 'Ended';
+    }
+    return formatDistanceToNow(new Date(auction.endsAt), { addSuffix: true });
+  };
+
+  const renderBiddingPower = () => {
+    if (!user || user.role === 'artist' || user.role === 'verified_artist') {
+      return null;
+    }
+
+    let value: string;
+    let caption: string | null = null;
+
+    const exposure = normalizeBidAnalytics(analytics).activeBidExposure;
+
+    if (loadingAnalytics) {
+      value = '—';
+    } else if (!analytics) {
+      value = '—';
+      caption = 'Unavailable';
+    } else {
+      value = `₹${exposure.toLocaleString('en-IN')}`;
+      if (exposure === 0) {
+        caption = 'No active commitments';
+      }
+    }
 
     return (
-      <div key={auction.id} className="card" style={{ padding: 24, position: 'relative' }}>
-        {isMyBids && status && (
-          <div style={{ position: 'absolute', top: 24, right: 24, padding: '4px 12px', borderRadius: 16, backgroundColor: status.bg, fontWeight: 600 }} className={`text-label-sm uppercase ${status.color}`}>
-            {status.label}
-          </div>
+      <div className="bids-page-header-power flex flex-col items-end gap-8">
+        <span className="text-label-sm text-on-surface-variant uppercase">Your Bidding Power</span>
+        <span className="text-headline-md text-primary">{value}</span>
+        {caption && (
+          <span className="text-caption text-on-surface-variant">{caption}</span>
         )}
-        <div className="flex gap-24">
-          {/* position:relative required for next/image fill mode */}
-          <div style={{ width: 180, height: 180, borderRadius: "var(--radius-md)", overflow: "hidden", flexShrink: 0, position: "relative" }}>
-            <Link href={`/bids/${auction.id}`} style={{ display: "block", width: "100%", height: "100%", position: "relative" }}>
-              <Image
-                src={auction.artworkImageUrl || "https://placehold.co/400x400"}
-                alt={auction.artworkTitle}
-                fill
-                sizes="180px"
-                style={{ objectFit: "cover" }}
-              />
-            </Link>
-          </div>
-          <div className="flex flex-col grow">
-            <div className="flex justify-between items-start" style={{ marginBottom: 8, paddingRight: isMyBids ? 80 : 0 }}>
-              <Link href={`/bids/${auction.id}`}>
-                <h3 className="text-headline-sm text-primary hover:underline">{auction.artworkTitle}</h3>
-              </Link>
-              {!isMyBids && (
-                <div className="verified-badge">
-                  <div className="status-dot pulse" style={{ marginRight: 4 }} /> Live
-                </div>
-              )}
-            </div>
-            <p className="text-body-md text-on-surface-variant mb-4">
-              By {auction.artistName}
-            </p>
-            
-            <div className="mt-auto grid grid-cols-2 gap-16" style={{ display: "grid", gridTemplateColumns: isMyBids ? "1fr 1fr 1fr" : "1fr 1fr", gap: 16, marginTop: "auto" }}>
-              <div className="bg-surface-container-low p-4 rounded" style={{ padding: 16, borderRadius: 4 }}>
-                <span className="text-caption text-on-surface-variant block uppercase">Current Bid</span>
-                <span className="text-price-lg text-primary">₹{auction.currentBid.toLocaleString('en-IN')}</span>
-              </div>
-              {isMyBids && (
-                <div className="bg-surface-container-low p-4 rounded" style={{ padding: 16, borderRadius: 4 }}>
-                  <span className="text-caption text-on-surface-variant block uppercase">Your Max Bid</span>
-                  <span className="text-price-lg text-primary">₹{userMaxBid.toLocaleString('en-IN')}</span>
-                </div>
-              )}
-              <div className="bg-surface-container-low p-4 rounded" style={{ padding: 16, borderRadius: 4 }}>
-                <span className="text-caption text-on-surface-variant block uppercase">Time Remaining</span>
-                <span className="text-headline-md text-status-urgency">
-                  {new Date(auction.endsAt).getTime() < Date.now() ? 'Ended' : formatDistanceToNow(new Date(auction.endsAt))}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
+    );
+  };
+
+  const renderAuctionCard = (auction: Auction, userMaxBid?: number, variant: 'grid' | 'list' = 'grid') => {
+    const isMyBids = activeTab === 'my_bids' && userMaxBid !== undefined;
+    const bidStatus = isMyBids && user ? getBidStatus(auction, userMaxBid, user.id) : null;
+    const statusBadge = getAuctionStatusBadge(auction);
+    const cardClass = variant === 'list' ? 'auction-card bids-auction-list-card' : 'auction-card';
+
+    return (
+      <article key={auction.id} className={cardClass}>
+        <div className="auction-img-wrap">
+          {!isMyBids && (
+            <div className="status-badge">
+              <div className={`status-dot ${statusBadge.dotClass}`} />
+              <span className="text-label-sm text-primary">{statusBadge.label}</span>
+            </div>
+          )}
+          {isMyBids && bidStatus && (
+            <div
+              className="status-badge"
+              style={{ backgroundColor: bidStatus.bg, borderColor: 'transparent' }}
+            >
+              <span className={`text-label-sm uppercase ${bidStatus.color}`} style={{ fontWeight: 600 }}>
+                {bidStatus.label}
+              </span>
+            </div>
+          )}
+          <Link href={`/bids/${auction.id}`} style={{ display: 'block', position: 'absolute', inset: 0 }}>
+            <Image
+              src={auction.artworkImageUrl || "https://placehold.co/400x500"}
+              alt={auction.artworkTitle}
+              fill
+              sizes={variant === 'list' ? '(max-width: 640px) 100vw, 240px' : '(max-width: 768px) 100vw, 50vw'}
+              className="card-img"
+              style={{ objectFit: 'cover' }}
+            />
+          </Link>
+        </div>
+
+        <div className="auction-info">
+          <div className="auction-title-row">
+            <Link href={`/bids/${auction.id}`}>
+              <h3 className="text-headline-sm text-primary auction-title">{auction.artworkTitle}</h3>
+            </Link>
+            <span className="text-headline-sm text-accent-gold shrink-0">
+              ₹{auction.currentBid.toLocaleString('en-IN')}
+            </span>
+          </div>
+
+          <p className="text-label-sm text-on-surface-variant auction-author uppercase">
+            {auction.artistName}
+            <span style={{ marginLeft: 4, verticalAlign: 'middle', display: 'inline-flex' }}>
+              <Icon name="verified" size={14} className="text-accent-emerald" />
+            </span>
+          </p>
+
+          <div className="bids-auction-stats">
+            <div className="bids-auction-stat">
+              <span className="text-caption text-on-surface-variant uppercase">Time</span>
+              <span className="text-label-md text-status-urgency">{formatTimeRemaining(auction)}</span>
+            </div>
+            <div className="bids-auction-stat">
+              <span className="text-caption text-on-surface-variant uppercase">Bids</span>
+              <span className="text-label-md text-primary">{auction.totalBids ?? 0}</span>
+            </div>
+            <div className="bids-auction-stat">
+              <span className="text-caption text-on-surface-variant uppercase">Min Inc.</span>
+              <span className="text-label-md text-primary">₹{auction.minIncrement.toLocaleString('en-IN')}</span>
+            </div>
+            {isMyBids && userMaxBid !== undefined && (
+              <div className="bids-auction-stat">
+                <span className="text-caption text-on-surface-variant uppercase">Your Max</span>
+                <span className="text-label-md text-primary">₹{userMaxBid.toLocaleString('en-IN')}</span>
+              </div>
+            )}
+          </div>
+
+          <Link href={`/bids/${auction.id}`} className="auction-btn" style={{ textDecoration: 'none', display: 'block' }}>
+            {isMyBids ? 'View Auction' : 'Place Bid'}
+          </Link>
+        </div>
+      </article>
     );
   };
 
@@ -269,7 +399,7 @@ export default function BidsClient({ initialAuctions }: { initialAuctions: Aucti
   return (
     <>
       <div className="bg-surface-container border-b border-outline-variant" style={{ borderBottom: "1px solid rgba(196, 199, 199, 0.2)" }}>
-        <div className="container py-8 flex flex-col gap-16" style={{ padding: "48px var(--margin-desktop) 32px" }}>
+        <div className="container bids-page-header py-8 flex flex-col gap-16" style={{ padding: "48px var(--margin-desktop) 32px" }}>
           <div className="flex justify-between items-end">
             <div>
               <h1 className="text-display-lg text-primary">Live Bidding</h1>
@@ -277,10 +407,7 @@ export default function BidsClient({ initialAuctions }: { initialAuctions: Aucti
                 Participate in real-time auctions for exclusive, authenticated masterworks.
               </p>
             </div>
-            <div className="flex flex-col items-end gap-8">
-              <span className="text-label-sm text-on-surface-variant uppercase">Your Bidding Power</span>
-              <span className="text-headline-md text-primary">₹5,00,000</span>
-            </div>
+            {renderBiddingPower()}
           </div>
         </div>
       </div>
@@ -321,7 +448,7 @@ export default function BidsClient({ initialAuctions }: { initialAuctions: Aucti
             <div style={{ minHeight: 480 }}>
               {activeTab === 'all' ? (
                 auctions.length > 0 ? (
-                  <div className="flex flex-col gap-24">
+                  <div className="auction-grid">
                     {auctions.map((auction) => renderAuctionCard(auction))}
                   </div>
                 ) : (
@@ -344,9 +471,28 @@ export default function BidsClient({ initialAuctions }: { initialAuctions: Aucti
                     </span>
                     <p className="text-body-md text-on-surface-variant">Loading your bids…</p>
                   </div>
+                ) : myBidsError ? (
+                  <div className="empty-state">
+                    <span className="material-symbols-outlined empty-state-icon" style={{ fontSize: 32 }}>
+                      error_outline
+                    </span>
+                    <p className="text-body-lg text-error" role="alert">{myBidsError}</p>
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      style={{ marginTop: 16 }}
+                      onClick={() => {
+                        setMyBidsError(null);
+                        myBidsInitialLoad.current = true;
+                        loadMyBids();
+                      }}
+                    >
+                      Try Again
+                    </button>
+                  </div>
                 ) : myBidsData.length > 0 ? (
-                  <div className="flex flex-col gap-24">
-                    {myBidsData.map((data) => renderAuctionCard(data.auction, data.userMaxBid))}
+                  <div className="bids-auction-list">
+                    {myBidsData.map((data) => renderAuctionCard(data.auction, data.userMaxBid, 'list'))}
                   </div>
                 ) : (
                   <div className="empty-state">

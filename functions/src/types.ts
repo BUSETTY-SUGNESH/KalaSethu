@@ -17,6 +17,7 @@ export interface Auction {
   artistId?: string;
   artistName?: string;
   startPrice?: number;
+  reservePrice?: number;
   // Outbid detection — updated on every bid placement
   lastBidderId?: string;
   lastBidderName?: string;

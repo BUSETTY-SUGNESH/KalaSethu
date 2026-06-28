@@ -1,5 +1,11 @@
 import { adminDb } from '@/lib/firebase/admin';
 import type { Auction, Bid } from '@/app/types';
+import { AUCTION_BID_HISTORY_LIMIT } from '@/lib/constants/auction';
+
+/** Firestore document IDs must be non-empty strings without slashes. */
+export function isValidAuctionId(id: unknown): id is string {
+  return typeof id === 'string' && id.trim().length > 0 && !id.includes('/');
+}
 
 /**
  * Server-only service for fetching auctions using firebase-admin.
@@ -30,6 +36,10 @@ export async function getActiveAuctionsServer(limit: number = 10): Promise<Aucti
 }
 
 export async function getAuctionServer(auctionId: string): Promise<Auction | null> {
+  if (!isValidAuctionId(auctionId)) {
+    return null;
+  }
+
   try {
     const doc = await adminDb.collection('auctions').doc(auctionId).get();
     if (!doc.exists) return null;
@@ -48,12 +58,17 @@ export async function getAuctionServer(auctionId: string): Promise<Auction | nul
 }
 
 export async function getAuctionBidsServer(auctionId: string): Promise<Bid[]> {
+  if (!isValidAuctionId(auctionId)) {
+    return [];
+  }
+
   try {
     const snapshot = await adminDb
       .collection('auctions')
       .doc(auctionId)
       .collection('bids')
       .orderBy('amount', 'desc')
+      .limit(AUCTION_BID_HISTORY_LIMIT)
       .get();
       
     return snapshot.docs.map(doc => {

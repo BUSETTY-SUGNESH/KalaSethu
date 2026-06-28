@@ -164,13 +164,26 @@ function batchNotifyAuctionLost(batch, loserId, auction) {
  */
 function batchNotifyArtistAuctionClosed(batch, artistId, auction, winnerId, winnerName, winningAmount) {
     const artworkName = auction.artworkTitle ?? 'your artwork';
-    const hasBids = !!winnerId;
-    const title = hasBids
-        ? `Your auction for "${artworkName}" has closed successfully`
-        : `Your auction for "${artworkName}" ended with no bids`;
-    const message = hasBids
-        ? `Winning bid: ${formatINR(winningAmount)} by ${winnerName ?? 'a buyer'}. Visit your dashboard for next steps.`
-        : `No bids were placed. You may relist the artwork at any time from your dashboard.`;
+    const bidCount = auction.bidCount ?? 0;
+    let title;
+    let message;
+    if (winnerId) {
+        title = `Your auction for "${artworkName}" has closed successfully`;
+        message = `Winning bid: ${formatINR(winningAmount)} by ${winnerName ?? 'a buyer'}. Visit your dashboard for next steps.`;
+    }
+    else if (bidCount > 0) {
+        title = `Your auction for "${artworkName}" ended — reserve not met`;
+        if (auction.reservePrice) {
+            message = `Highest bid was ${formatINR(winningAmount)}, below your reserve of ${formatINR(auction.reservePrice)}. You may relist the artwork at any time from your dashboard.`;
+        }
+        else {
+            message = `Highest bid was ${formatINR(winningAmount)}. No sale was recorded. You may relist the artwork at any time from your dashboard.`;
+        }
+    }
+    else {
+        title = `Your auction for "${artworkName}" ended with no bids`;
+        message = `No bids were placed. You may relist the artwork at any time from your dashboard.`;
+    }
     batchNotification(batch, {
         userId: artistId,
         type: 'auction_closed_artist',

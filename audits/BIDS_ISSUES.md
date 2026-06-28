@@ -1,40 +1,112 @@
 # Bids Page — Issue Report
 
-> **Files:** [`app/(public)/bids/page.tsx`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/bids/page.tsx), [`BidsClient.tsx`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/bids/BidsClient.tsx), [`SellerBidsClient.tsx`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/bids/SellerBidsClient.tsx)
-> **Services:** `auction-service.ts`
+> **Last updated:** 2026-06-28  
+> **Status:** All major issues **resolved**  
+> **Files:** [`app/(public)/bids/page.tsx`](../app/(public)/bids/page.tsx), [`BidsClient.tsx`](../app/(public)/bids/BidsClient.tsx), [`SellerBidsClient.tsx`](../app/(public)/bids/SellerBidsClient.tsx), [`CreateAuctionModal.tsx`](../app/(public)/bids/CreateAuctionModal.tsx)  
+> **Services:** [`auction-service.ts`](../lib/services/auction-service.ts)  
+> **Cloud Functions:** [`functions/src/auction.ts`](../functions/src/auction.ts)  
+> **Rules:** [`firestore.rules`](../firestore.rules)
 
 ---
 
 ## Summary
-The Bids page switches between buyer view (`BidsClient`) and seller view (`SellerBidsClient`) based on user role. The buyer side correctly loads active auctions. The seller side has a **non-functional create auction form** and hardcoded statistics.
+
+The Bids page switches between buyer view (`BidsClient`) and seller view (`SellerBidsClient`) based on user role. All issues identified in the original audit have been fixed, along with follow-up critical fixes for permissions, analytics, card UI, and seller page polish.
+
+**Buyer side:** Active auctions load via SSR; premium auction cards; My Active Bids tab with real data; bid analytics sidebar; real bidding-power exposure from `getUserBidAnalytics`.
+
+**Seller side:** Functional create/edit/cancel flows via `CreateAuctionModal` and Cloud Functions; real stats from `getAllAuctionsByArtist` + `computeSellerAuctionStats`; seller-only auction list; premium card layout matching the customer experience.
 
 ---
 
-## Issues
+## Original Audit Issues
 
-### 🟡 M-05 — Create Auction Form is Unbound Stub `[EXISTING]`
-**File:** [`SellerBidsClient.tsx:L64-113`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/bids/SellerBidsClient.tsx#L64-L113)
-**Description:** The Create Auction form renders HTML inputs (`<select>`, `<input type="number">`, `<input type="datetime-local">`) but none are bound to React state. The "Launch Auction" button has no `onClick` handler and no form `onSubmit`. The artwork dropdown has hardcoded options.
-**Impact:** Artists cannot create new auctions. The entire auction creation flow is a visual stub.
+### ✅ M-05 — Create Auction Form is Unbound Stub `[RESOLVED]`
+**Was:** Inline form stub with no state or handlers.  
+**Fix:** [`CreateAuctionModal.tsx`](../app/(public)/bids/CreateAuctionModal.tsx) — bound form, artwork picker, validation, and create flow wired to backend.
 
-### 🟡 M-19 — "Edit Auction" and "Cancel" Buttons Have No Handlers `[NEW]`
-**File:** [`SellerBidsClient.tsx:L192-193`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/bids/SellerBidsClient.tsx#L192-L193)
-**Description:** Each auction card in the seller view shows "Edit Auction" and "Cancel" buttons. Neither has an `onClick` handler.
-**Impact:** Sellers cannot edit or cancel their live auctions.
+### ✅ M-19 — "Edit Auction" and "Cancel" Buttons Have No Handlers `[RESOLVED]`
+**Was:** Buttons rendered with no `onClick` handlers.  
+**Fix:** Edit opens `CreateAuctionModal` in edit mode (scheduled + zero bids only). Cancel calls `cancelAuction` Cloud Function with confirmation. Disabled state when not modifiable.
 
-### 🟡 M-20 — Seller Auction Stats Are Hardcoded `[NEW]`
-**File:** [`SellerBidsClient.tsx:L121-133`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/bids/SellerBidsClient.tsx#L121-L133)
-**Description:** Stats cards show static values: "Active Auctions: 3", "Total Bids Received: 47", "Auctions Won by Buyers: 14", "Revenue from Bids: ₹8.2L". These are hardcoded and never reflect actual data.
+### ✅ M-20 — Seller Auction Stats Are Hardcoded `[RESOLVED]`
+**Was:** Static values (Active: 3, Bids: 47, etc.).  
+**Fix:** `computeSellerAuctionStats()` over paginated `getAllAuctionsByArtist()` data. Compact stats bar in `SellerBidsClient`.
 
-### 🔵 — Seller View Loads All Active Auctions, Not Just Seller's `[NEW]`
-**File:** [`SellerBidsClient.tsx:L19`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/bids/SellerBidsClient.tsx#L19)
-**Description:** The seller view calls `getActiveAuctions(10)` which fetches all active auctions platform-wide, not just the seller's own auctions. Should call `getAuctionsByArtist(userId)`.
-**Impact:** Sellers see other artists' auctions in "Your Active Auctions" section.
+### ✅ Seller View Loads All Active Auctions, Not Just Seller's `[RESOLVED]`
+**Was:** `getActiveAuctions(10)` returned platform-wide auctions.  
+**Fix:** `getAllAuctionsByArtist(user.id)`; active list filtered to `live`, `ending_soon`, `scheduled`.
 
-### 🔵 — Completed Auctions Sidebar is Hardcoded `[NEW]`
-**File:** [`SellerBidsClient.tsx:L231-246`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/bids/SellerBidsClient.tsx#L231-L246)
-**Description:** The "Completed Auctions" sidebar shows static values: "Total Completed: 14", "Avg. Final Bid: ₹58,000", "Highest Sale: ₹4,50,000".
+### ✅ Completed Auctions Sidebar is Hardcoded `[RESOLVED]`
+**Was:** Static completed-auction metrics.  
+**Fix:** Sidebar shows `stats.completedCount`, `stats.avgFinalBid`, `stats.highestSale` from `computeSellerAuctionStats`.
 
-### 🔵 — `formatDistanceToNow` Missing `addSuffix` `[NEW]`
-**File:** [`SellerBidsClient.tsx:L187`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/bids/SellerBidsClient.tsx#L187)
-**Description:** Time display shows "2 hours" instead of "2 hours left" or "in 2 hours" because `addSuffix: true` is not passed.
+### ✅ `formatDistanceToNow` Missing `addSuffix` `[RESOLVED]`
+**Was:** Time strings like "2 hours" without context.  
+**Fix:** `addSuffix: true` in `BidsClient`, `SellerBidsClient`, and `AuctionDetailsClient`.
+
+---
+
+## Follow-Up Critical Fixes (Resolved)
+
+### ✅ My Active Bids — `Missing or insufficient permissions` `[RESOLVED]`
+**Cause:** Collection-group query on `bids` without collection-group-safe rules; fetch ran before Firebase Auth was ready.  
+**Fix:**
+- Firestore wildcard rule: `match /{path=**}/bids/{bidId}` (owner-only read); top-level `bids/{bidId}` tightened to owner-only.
+- `BidsClient` gates fetch on `firebaseUser` + `!authLoading`.
+- `findBidsByUser` extracts `auctionId` from doc path when field is missing on older bids.
+
+### ✅ Hardcoded "Your Bidding Power" `[RESOLVED]`
+**Was:** Header showed `₹5,00,000` always.  
+**Fix:** `getUserBidAnalytics` returns `activeBidExposure` (sum of user's max bid per active auction). `normalizeBidAnalytics()` provides safe fallbacks when fields are missing.
+
+### ✅ Customer auction cards — basic layout `[RESOLVED]`
+**Fix:** Reused `.auction-card`, `.auction-grid`, `.bids-auction-list-card`, `.status-badge`, `.bids-auction-stats` patterns from the design system. Responsive grid (All Auctions) and list (My Active Bids).
+
+### ✅ My Active Bids stale after placing a bid `[RESOLVED]`
+**Fix:** `notifyBidChanged()` dispatched after successful `placeBid`; `BidsClient` listens and refetches my bids + analytics. Tab re-fetch on each visit to My Active Bids.
+
+### ✅ Artist Bids page UI below customer polish `[RESOLVED]`
+**Fix:** `SellerBidsClient` redesigned to match customer card design, compact analytics bar, secondary sidebar styling. All artist functionality preserved (View Bids, Edit, Cancel, statistics).
+
+### ✅ Backend auction lifecycle (related) `[RESOLVED]`
+Deployed fixes in `functions/src/auction.ts`: `placeBid` reserve/uniqueBidders/scheduled→live promotion; `closeEndedAuctions` uses `live`/`ending_soon`; `cancelAuction` / `updateAuction` callables; rate limiting on `placeBid`.
+
+---
+
+## Remaining Minor / Out-of-Scope Items
+
+These are **not** blocking the Bids page for production use but are documented for future work:
+
+| Item | Notes |
+|------|-------|
+| Bid doc `status` (`outbid`/`won`) | Prior bid documents are not retroactively updated when a new bid wins. |
+| My Bids cache | Data refreshes on tab switch and after bid events; not real-time subscription. |
+| Close cron latency | `closeEndedAuctions` runs every ~1 minute; brief window after `endsAt`. |
+| FCM / email notifications | Notification helpers exist; push/email delivery may still be stubbed. |
+| App Check | Off by default unless configured in env. |
+| Auction details audit | All items resolved — see [`AUCTION_DETAILS_ISSUES.md`](./AUCTION_DETAILS_ISSUES.md) for deferred/out-of-scope notes. |
+
+---
+
+## Verification Checklist
+
+- [x] `npm run build` passes
+- [x] Firestore rules deployed (`/{path=**}/bids/{bidId}` owner read)
+- [x] Cloud Functions deployed (`placeBid`, `closeEndedAuctions`, `getUserBidAnalytics`, `cancelAuction`, `updateAuction`)
+- [x] Collector: All Auctions grid, My Active Bids tab, bidding power, analytics sidebar
+- [x] Artist: Create/edit/cancel auction, real stats, seller-only list, premium cards
+- [x] Guest: `/bids/[id]` public bid history still readable
+
+---
+
+## Files Changed (cumulative)
+
+| Area | Key files |
+|------|-----------|
+| Buyer UI | `BidsClient.tsx`, `globals.css` |
+| Seller UI | `SellerBidsClient.tsx`, `CreateAuctionModal.tsx` |
+| Services | `auction-service.ts`, `auction.repository.ts` |
+| Backend | `functions/src/auction.ts`, `functions/src/notification-helpers.ts` |
+| Rules | `firestore.rules` |
+| SSR | `app/(public)/bids/[id]/page.tsx`, `auction-admin.service.ts` |

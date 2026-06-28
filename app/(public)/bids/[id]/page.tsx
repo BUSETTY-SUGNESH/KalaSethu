@@ -1,13 +1,30 @@
 import { Metadata } from 'next';
-import { getAuctionServer, getAuctionBidsServer } from '@/lib/services/server/auction-admin.service';
+import { notFound } from 'next/navigation';
+import {
+  getAuctionServer,
+  getAuctionBidsServer,
+  isValidAuctionId,
+} from '@/lib/services/server/auction-admin.service';
 import AuctionDetailsClient from './AuctionDetailsClient';
 import type { Bid } from '@/app/types';
 
 export const revalidate = 0;
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const auction = await getAuctionServer(params.id);
-  
+type PageProps = {
+  params: Promise<{ id: string }>;
+};
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { id } = await params;
+
+  if (!isValidAuctionId(id)) {
+    return {
+      title: 'Auction Not Found | KalaSetu',
+    };
+  }
+
+  const auction = await getAuctionServer(id);
+
   if (!auction) {
     return {
       title: 'Auction Not Found | KalaSetu',
@@ -20,13 +37,18 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
-export default async function AuctionDetailsPage({ params }: { params: { id: string } }) {
-  const auction = await getAuctionServer(params.id);
+export default async function AuctionDetailsPage({ params }: PageProps) {
+  const { id } = await params;
+
+  if (!isValidAuctionId(id)) {
+    notFound();
+  }
+
+  const auction = await getAuctionServer(id);
   let bids: Bid[] = [];
-  
+
   if (auction) {
-    // Type casting to ensure it matches the Client component expectations
-    const serverBids = await getAuctionBidsServer(params.id);
+    const serverBids = await getAuctionBidsServer(id);
     bids = serverBids as unknown as Bid[];
   }
 

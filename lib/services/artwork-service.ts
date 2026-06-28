@@ -3,7 +3,7 @@
 // Business logic layer bridging UI to Repository layer.
 // ============================================================
 import { artworkRepository } from '@/lib/repositories';
-import { deleteFile, deleteDirectory } from '@/lib/firebase/storage';
+import { deleteFile, deleteDirectory, uploadMultipleFiles } from '@/lib/firebase/storage';
 import { functions } from '@/lib/firebase/config';
 import { httpsCallable } from 'firebase/functions';
 import type {
@@ -92,6 +92,68 @@ export async function deleteArtwork(artworkId: string): Promise<void> {
     }
   }
   await artworkRepository.delete(artworkId);
+}
+
+// --- Create and publish artwork from auction modal upload ---
+export async function createAndPublishArtworkForAuction(
+  artistId: string,
+  artistName: string,
+  artistVerified: boolean,
+  title: string,
+  imageFile: File,
+  startPrice: number
+): Promise<{ artworkId: string; title: string; imageUrl: string; publishStatus: 'published' | 'pending' }> {
+  let artworkId: string | null = null;
+
+  try {
+    artworkId = await createArtwork(
+      artistId,
+      artistName,
+      artistVerified,
+      {
+        title,
+        description: '',
+        category: 'other',
+        medium: 'Not specified',
+        dimensions: 'Not specified',
+        year: new Date().getFullYear(),
+        price: startPrice,
+        listingType: 'auction',
+        tags: [],
+        isCommissionable: false,
+      },
+      []
+    );
+
+    const uploadedImages = await uploadMultipleFiles(
+      [imageFile],
+      `artworks/${artistId}/${artworkId}`
+    );
+
+    const images: ArtworkImage[] = uploadedImages.map((image, index) => ({
+      id: image.fileName,
+      url: image.downloadURL,
+      thumbnailUrl: image.downloadURL,
+      storagePath: image.fullPath,
+      isPrimary: index === 0,
+      order: index,
+    }));
+
+    const imageUrl = images[0]?.url || '';
+    await updateArtwork(artworkId, {
+      images,
+      thumbnailUrl: imageUrl,
+    });
+
+    const { status: publishStatus } = await publishArtwork(artworkId);
+
+    return { artworkId, title, imageUrl, publishStatus };
+  } catch (error) {
+    if (artworkId) {
+      await deleteArtwork(artworkId).catch(() => {});
+    }
+    throw error;
+  }
 }
 
 // --- Get Artworks by Artist ---

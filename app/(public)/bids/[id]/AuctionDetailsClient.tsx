@@ -6,7 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
-import { subscribeToAuction, subscribeToAuctionBids, placeBid } from "@/lib/services/auction-service";
+import { subscribeToAuction, subscribeToAuctionBids, placeBid, validateBid, isAuctionAcceptingBids } from "@/lib/services/auction-service";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useUIStore } from "@/lib/stores/ui-store";
 import type { Auction, Bid } from "@/app/types";
@@ -43,6 +43,16 @@ export default function AuctionDetailsClient({
   const [staleMinBid, setStaleMinBid] = useState<number | null>(null);
 
   const [isPlacingBid, setIsPlacingBid] = useState(false);
+  const [userHasBid, setUserHasBid] = useState(() =>
+    initialBids.some((b) => b.bidderId === user?.id)
+  );
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (bids.some((b) => b.bidderId === user.id)) {
+      setUserHasBid(true);
+    }
+  }, [bids, user?.id]);
 
   // ── Real-time subscriptions ──────────────────────────────────
   useEffect(() => {
@@ -138,6 +148,12 @@ export default function AuctionDetailsClient({
     // Always validate against the LIVE auction state, not the
     // state at the time the user started typing — the backend
     // is the final authority, but we surface errors early.
+    const validationError = validateBid(auction, amount, user.id);
+    if (validationError) {
+      addToast({ type: 'error', title: 'Action Not Allowed', message: validationError });
+      return;
+    }
+
     const liveMinimum = auction.currentBid + auction.minIncrement;
     if (amount < liveMinimum) {
       addToast({ 
@@ -161,6 +177,7 @@ export default function AuctionDetailsClient({
       });
       addToast({ type: 'success', title: 'Bid Placed!', message: `Your bid of ₹${amount.toLocaleString('en-IN')} was successful.` });
       setStaleMinBid(null);
+      setUserHasBid(true);
     } catch (error: any) {
       console.error("Bid error:", error);
       
@@ -192,18 +209,32 @@ export default function AuctionDetailsClient({
   }
 
   const isEnded = auction.status === 'ended' || new Date(auction.endsAt).getTime() < Date.now();
+  const isNotStarted =
+    auction.status === 'scheduled' && new Date(auction.startsAt).getTime() > Date.now();
+  const isAcceptingBids = isAuctionAcceptingBids(auction);
   const liveMinimum = auction.currentBid + auction.minIncrement;
+  const isFinalizing =
+    isEnded && !auction.winnerId && auction.status !== 'ended' && auction.totalBids > 0;
+  const reserveMet =
+    !auction.reservePrice || auction.currentBid >= auction.reservePrice;
 
   // ── Bidder status (Issue 3.3) ────────────────────────────────
-  // Derived entirely from state already on the page — zero extra queries.
-  // bids[0] is the highest bid (subscribeToAuctionBids orders by amount DESC).
-  // Artists are excluded from bidder-status messaging per role-based spec.
+  // lastBidderId is authoritative for leading/outbid; userHasBid
+  // tracks participation even when the user's bid is outside the
+  // displayed history window. Artists excluded per role-based spec.
   const isCustomer = !!user && user.role !== 'artist' && user.role !== 'verified_artist';
   const topBid = bids[0] ?? null;
-  const isUserLeading = isCustomer && !isEnded && !!topBid && topBid.bidderId === user?.id;
-  const isUserOutbid  = isCustomer && !isEnded && !!topBid && topBid.bidderId !== user?.id
-                        && bids.some(b => b.bidderId === user?.id);
-  const isUserWinner  = isCustomer && isEnded && !!auction.winnerId && auction.winnerId === user?.id;
+  const leadingBidderId = auction.lastBidderId ?? topBid?.bidderId;
+  const isUserLeading =
+    isCustomer && !isEnded && !!leadingBidderId && leadingBidderId === user?.id;
+  const isUserOutbid =
+    isCustomer && !isEnded && !!leadingBidderId && leadingBidderId !== user?.id && userHasBid;
+  const isProvisionalWinner =
+    isCustomer && isFinalizing && reserveMet && auction.lastBidderId === user?.id;
+  const isUserWinner =
+    isCustomer &&
+    isEnded &&
+    ((!!auction.winnerId && auction.winnerId === user?.id) || isProvisionalWinner);
 
   return (
     <>
@@ -250,6 +281,10 @@ export default function AuctionDetailsClient({
                 {isEnded ? (
                   <div className="verified-badge" style={{ backgroundColor: 'var(--color-surface-container-high)', color: 'var(--color-on-surface-variant)' }}>
                     Ended
+                  </div>
+                ) : isNotStarted ? (
+                  <div className="verified-badge" style={{ backgroundColor: 'var(--color-surface-container-high)', color: 'var(--color-on-surface-variant)' }}>
+                    Scheduled
                   </div>
                 ) : (
                   <div className="verified-badge">
@@ -326,13 +361,13 @@ export default function AuctionDetailsClient({
                   <span className={`text-display-sm ${isEnded ? "text-on-surface-variant" : "text-status-urgency"}`}>
                     {isEnded 
                       ? format(new Date(auction.endsAt), "MMM d, yyyy")
-                      : formatDistanceToNow(new Date(auction.endsAt))
+                      : formatDistanceToNow(new Date(auction.endsAt), { addSuffix: true })
                     }
                   </span>
                 </div>
               </div>
 
-              {!isEnded && (
+              {isAcceptingBids ? (
                 <form onSubmit={handlePlaceBid} className="flex flex-col gap-16">
 
                   {/* ── Stale-bid banner ─────────────────────────────────
@@ -422,8 +457,18 @@ export default function AuctionDetailsClient({
                     {isPlacingBid ? "Placing Bid..." : "Place Bid"}
                   </Button>
                 </form>
+              ) : isNotStarted ? (
+                <p className="text-body-md text-on-surface-variant text-center">
+                  Bidding opens {formatDistanceToNow(new Date(auction.startsAt), { addSuffix: true })}.
+                </p>
+              ) : null}
+
+              {isFinalizing && (
+                <p className="text-body-sm text-on-surface-variant text-center" style={{ marginTop: 16 }}>
+                  Finalizing results…
+                </p>
               )}
-              
+
               {isEnded && auction.winnerId && (
                 <div className="bg-surface-container-low p-4 rounded text-center" style={{ padding: 16, borderRadius: 8 }}>
                   <span className="text-label-md text-primary font-bold">Auction Won</span>

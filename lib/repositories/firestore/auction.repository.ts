@@ -15,12 +15,35 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   onSnapshot,
   paginatedQuery,
   type DocumentSnapshot,
   type Unsubscribe,
 } from '@/lib/firebase/firestore';
 import type { Auction, AuctionStatus, Bid, PaginatedResult } from '@/app/types';
+import { AUCTION_BID_HISTORY_LIMIT } from '@/lib/constants/auction';
+
+function extractAuctionIdFromPath(path: string): string | undefined {
+  const parts = path.split('/');
+  const auctionsIndex = parts.indexOf('auctions');
+  if (auctionsIndex >= 0 && parts[auctionsIndex + 1]) {
+    const auctionId = parts[auctionsIndex + 1];
+    if (auctionId && !auctionId.includes('/')) {
+      return auctionId;
+    }
+  }
+  return undefined;
+}
+
+function mapBidDoc(doc: { id: string; ref: { path: string }; data: () => Record<string, unknown> }): Bid {
+  const data = doc.data();
+  const auctionId =
+    (typeof data.auctionId === 'string' && data.auctionId) ||
+    extractAuctionIdFromPath(doc.ref.path) ||
+    '';
+  return { id: doc.id, ...data, auctionId } as Bid;
+}
 
 export const auctionRepository = {
   async findById(id: string): Promise<Auction | null> {
@@ -113,7 +136,10 @@ export const auctionRepository = {
 
   // ── Bids ─────────────────────────────────────────────────────
 
-  async findBidsByAuction(auctionId: string, max: number = 50): Promise<Bid[]> {
+  async findBidsByAuction(
+    auctionId: string,
+    max: number = AUCTION_BID_HISTORY_LIMIT
+  ): Promise<Bid[]> {
     const q = query(
       subcollections.auctionBids(auctionId),
       orderBy('amount', 'desc'),
@@ -127,7 +153,7 @@ export const auctionRepository = {
     const q = query(
       subcollections.auctionBids(auctionId),
       orderBy('amount', 'desc'),
-      limit(20)
+      limit(AUCTION_BID_HISTORY_LIMIT)
     );
     return onSnapshot(q, snap => {
       cb(snap.docs.map(d => ({ id: d.id, ...d.data() }) as Bid));
@@ -139,11 +165,25 @@ export const auctionRepository = {
     pageSize: number = 20,
     lastDoc?: DocumentSnapshot | null
   ): Promise<PaginatedResult<Bid>> {
-    return paginatedQuery<Bid>(
-      collectionGroup(db, 'bids') as any,
-      [where('bidderId', '==', userId), orderBy('timestamp', 'desc')],
-      pageSize,
-      lastDoc
-    );
+    const baseConstraints = [
+      where('bidderId', '==', userId),
+      orderBy('timestamp', 'desc'),
+      limit(pageSize + 1),
+    ];
+
+    const q = lastDoc
+      ? query(collectionGroup(db, 'bids'), ...baseConstraints, startAfter(lastDoc))
+      : query(collectionGroup(db, 'bids'), ...baseConstraints);
+
+    const snapshot = await getDocs(q);
+
+    const hasMore = snapshot.docs.length > pageSize;
+    const docs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
+
+    return {
+      data: docs.map((d) => mapBidDoc(d)),
+      lastDoc: docs.length > 0 ? docs[docs.length - 1] : null,
+      hasMore,
+    };
   },
 };

@@ -28,8 +28,7 @@ export default function ArtworkDetailsPage() {
         const data = await getArtwork(artworkId);
         if (data) {
           setArtwork(data);
-          // Increment view count in background
-          incrementArtworkViews(artworkId).catch(console.error);
+          incrementArtworkViews(artworkId).catch(() => {});
         }
       } catch (error) {
         console.error("Failed to load artwork", error);

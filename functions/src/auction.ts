@@ -39,7 +39,7 @@ export const placeBid = functions.region('asia-south1').https.onCall(async (data
   assertAppCheck(context);
   await assertRateLimit(context.auth.uid, 'placeBid');
 
-  const { auctionId, amount, bidderName } = data;
+  const { auctionId, amount } = data;
 
   if (!auctionId || typeof amount !== 'number') {
     throw new functions.https.HttpsError(
@@ -50,6 +50,15 @@ export const placeBid = functions.region('asia-south1').https.onCall(async (data
 
   const bidderId = context.auth.uid;
   validateBidPayload({ auctionId, amount, bidderId });
+
+  let resolvedBidderName = 'Anonymous';
+  try {
+    const userRecord = await admin.auth().getUser(bidderId);
+    resolvedBidderName = userRecord.displayName || 'Anonymous';
+  } catch {
+    // Fall back to Anonymous if auth lookup fails
+  }
+
   const auctionRef = db.collection("auctions").doc(auctionId);
   const bidsRef = auctionRef.collection("bids");
 
@@ -67,12 +76,17 @@ export const placeBid = functions.region('asia-south1').https.onCall(async (data
       
       const auctionData = auctionDoc.data() as admin.firestore.DocumentData;
 
-      // Prevent bids if auction is ended
-      if (auctionData?.status === 'ended') {
+      // Prevent bids if auction is ended or cancelled
+      if (auctionData?.status === 'ended' || auctionData?.status === 'cancelled' || auctionData?.status === 'completed') {
         throw new functions.https.HttpsError('failed-precondition', "Auction has already ended.");
       }
 
-      if (auctionData?.status !== 'live' && auctionData?.status !== 'ending_soon') {
+      const startsAt = new Date(auctionData?.startsAt);
+      if (auctionData?.status === 'scheduled') {
+        if (startsAt.getTime() > Date.now()) {
+          throw new functions.https.HttpsError('failed-precondition', 'Auction has not started yet.');
+        }
+      } else if (auctionData?.status !== 'live' && auctionData?.status !== 'ending_soon') {
         throw new functions.https.HttpsError('failed-precondition', "Auction is not currently accepting bids.");
       }
       
@@ -103,36 +117,60 @@ export const placeBid = functions.region('asia-south1').https.onCall(async (data
 
       // Retain auction metadata snapshot for the notification copy
       capturedAuctionData = auctionData;
+
+      const priorBidSnap = await transaction.get(
+        bidsRef.where('bidderId', '==', bidderId).limit(1)
+      );
+      const isNewBidder = priorBidSnap.empty;
       
-      // Anti-snipe: if bid is placed within last 5 minutes, extend auction by 5 mins
+      // Anti-snipe: extend by extensionMinutes if bid placed within that window
       const bidTime = new Date();
       const timeRemainingMs = endsAt.getTime() - bidTime.getTime();
+      const extMins = auctionData.extensionMinutes ?? 5;
       
       let newEndsAt = endsAt.toISOString();
-      if (timeRemainingMs < 5 * 60 * 1000 && timeRemainingMs > 0) {
-        const extendedTime = new Date(endsAt.getTime() + 5 * 60 * 1000);
+      if (extMins > 0 && timeRemainingMs < extMins * 60 * 1000 && timeRemainingMs > 0) {
+        const extendedTime = new Date(endsAt.getTime() + extMins * 60 * 1000);
         newEndsAt = extendedTime.toISOString();
         console.log(`Auction ${auctionId} extended due to snipe bid. New ends at: ${newEndsAt}`);
       }
+
+      const newStatus =
+        (auctionData.status === 'live' || auctionData.status === 'scheduled') &&
+        timeRemainingMs <= 24 * 60 * 60 * 1000
+          ? 'ending_soon'
+          : auctionData.status === 'scheduled'
+            ? 'live'
+            : auctionData.status;
       
       // Update the auction document with new highest bid +
       // track the new last bidder for future outbid detection
-      transaction.update(auctionRef, {
+      const auctionUpdate: Record<string, unknown> = {
         currentBid: amount,
         totalBids: admin.firestore.FieldValue.increment(1),
         endsAt: newEndsAt,
         lastBidderId: bidderId,
-        lastBidderName: bidderName || 'Anonymous',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+        lastBidderName: resolvedBidderName,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      if (isNewBidder) {
+        auctionUpdate.uniqueBidders = admin.firestore.FieldValue.increment(1);
+      }
+      if (newStatus !== auctionData.status) {
+        auctionUpdate.status = newStatus;
+      }
+      transaction.update(auctionRef, auctionUpdate);
 
       // Write the new bid document
       const newBidRef = bidsRef.doc();
       transaction.set(newBidRef, {
         bidderId,
-        bidderName: bidderName || 'Anonymous',
+        bidderName: resolvedBidderName,
         amount,
         timestamp: bidTime.toISOString(),
+        auctionId,
+        currency: 'INR',
+        status: 'active',
       });
       
       return { success: true, bidId: newBidRef.id, amount, newEndsAt };
@@ -257,12 +295,18 @@ export const closeEndedAuctions = functions.region('asia-south1').pubsub.schedul
         winningAmount = winningBid.amount;
       }
 
+      if (winningBid && auctionData.reservePrice && winningAmount < auctionData.reservePrice) {
+        winnerId = null;
+        winnerName = null;
+      }
+
       // ── Mark auction as ended ──────────────────────────────
       writer.write((batch) => {
         batch.update(doc.ref, {
           status: "ended",
           winnerId,
           winnerName,
+          winningBid: winnerId ? winningAmount : null,
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
       });
@@ -280,6 +324,7 @@ export const closeEndedAuctions = functions.region('asia-south1').pubsub.schedul
         status: 'ended',
         endsAt: auctionData.endsAt,
         bidCount: auctionData.totalBids ?? 0,
+        reservePrice: auctionData.reservePrice,
       };
 
       if (winnerId) {
@@ -369,6 +414,17 @@ export const auctionEndingSoon = functions.region('asia-south1').pubsub
         if (timeRemainingMs <= 0) continue;
 
         const notifiedIntervals: string[] = auctionData.notifiedIntervals ?? [];
+        const within24h = timeRemainingMs <= 24 * 60 * 60 * 1000;
+
+        if (auctionData.status === 'live' && within24h) {
+          writer.write((batch) => {
+            batch.update(doc.ref, {
+              status: 'ending_soon',
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          });
+          await writer.flushIfNeeded();
+        }
 
         const auction = {
           id: doc.id,
@@ -437,6 +493,174 @@ export const auctionEndingSoon = functions.region('asia-south1').pubsub
   });
 
 // ─────────────────────────────────────────────────────────────
+// cancelAuction — Callable for artists to cancel their auction
+// ─────────────────────────────────────────────────────────────
+export const cancelAuction = functions.region('asia-south1').https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'You must be logged in.');
+  }
+
+  const { auctionId } = data;
+  if (!auctionId || typeof auctionId !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'auctionId is required.');
+  }
+
+  const uid = context.auth.uid;
+  const auctionRef = db.collection('auctions').doc(auctionId);
+
+  await db.runTransaction(async (transaction) => {
+    const auctionDoc = await transaction.get(auctionRef);
+    if (!auctionDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Auction does not exist.');
+    }
+
+    const auctionData = auctionDoc.data()!;
+    if (auctionData.artistId !== uid) {
+      throw new functions.https.HttpsError('permission-denied', 'You can only cancel your own auctions.');
+    }
+
+    const status = auctionData.status as string;
+    if (!['scheduled', 'live', 'ending_soon'].includes(status)) {
+      throw new functions.https.HttpsError('failed-precondition', 'This auction cannot be cancelled.');
+    }
+
+    if ((auctionData.totalBids ?? 0) > 0) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Cannot cancel an auction that has received bids.'
+      );
+    }
+
+    transaction.update(auctionRef, {
+      status: 'cancelled',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  return { success: true };
+});
+
+// ─────────────────────────────────────────────────────────────
+// updateAuction — Callable for artists to edit scheduled auctions
+// ─────────────────────────────────────────────────────────────
+export const updateAuction = functions.region('asia-south1').https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'You must be logged in.');
+  }
+
+  const {
+    auctionId,
+    startPrice,
+    reservePrice,
+    minIncrement,
+    startsAt,
+    endsAt,
+    extensionMinutes,
+    type,
+  } = data;
+
+  if (!auctionId || typeof auctionId !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'auctionId is required.');
+  }
+
+  const uid = context.auth.uid;
+  const auctionRef = db.collection('auctions').doc(auctionId);
+
+  await db.runTransaction(async (transaction) => {
+    const auctionDoc = await transaction.get(auctionRef);
+    if (!auctionDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Auction does not exist.');
+    }
+
+    const auctionData = auctionDoc.data()!;
+    if (auctionData.artistId !== uid) {
+      throw new functions.https.HttpsError('permission-denied', 'You can only edit your own auctions.');
+    }
+
+    if (auctionData.status !== 'scheduled') {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Only scheduled auctions with no bids can be edited.'
+      );
+    }
+
+    if ((auctionData.totalBids ?? 0) > 0) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Cannot edit an auction that has received bids.'
+      );
+    }
+
+    const updates: Record<string, unknown> = {
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    if (startPrice !== undefined) {
+      if (typeof startPrice !== 'number' || startPrice <= 0) {
+        throw new functions.https.HttpsError('invalid-argument', 'startPrice must be a positive number.');
+      }
+      updates.startPrice = startPrice;
+      updates.currentBid = startPrice;
+    }
+
+    if (reservePrice !== undefined) {
+      const effectiveStart = (updates.startPrice as number) ?? auctionData.startPrice;
+      if (reservePrice !== null && (typeof reservePrice !== 'number' || reservePrice < effectiveStart)) {
+        throw new functions.https.HttpsError(
+          'invalid-argument',
+          'reservePrice must be at least the starting price.'
+        );
+      }
+      updates.reservePrice = reservePrice ?? null;
+    }
+
+    if (minIncrement !== undefined) {
+      if (typeof minIncrement !== 'number' || minIncrement <= 0) {
+        throw new functions.https.HttpsError('invalid-argument', 'minIncrement must be a positive number.');
+      }
+      updates.minIncrement = minIncrement;
+    }
+
+    if (startsAt !== undefined) {
+      if (typeof startsAt !== 'string' || isNaN(new Date(startsAt).getTime())) {
+        throw new functions.https.HttpsError('invalid-argument', 'startsAt must be a valid ISO timestamp.');
+      }
+      updates.startsAt = startsAt;
+    }
+
+    if (endsAt !== undefined) {
+      if (typeof endsAt !== 'string' || isNaN(new Date(endsAt).getTime())) {
+        throw new functions.https.HttpsError('invalid-argument', 'endsAt must be a valid ISO timestamp.');
+      }
+      const effectiveStarts = (updates.startsAt as string) ?? auctionData.startsAt;
+      if (new Date(endsAt) <= new Date(effectiveStarts)) {
+        throw new functions.https.HttpsError('invalid-argument', 'endsAt must be after startsAt.');
+      }
+      updates.endsAt = endsAt;
+      updates.originalEndsAt = endsAt;
+    }
+
+    if (extensionMinutes !== undefined) {
+      if (typeof extensionMinutes !== 'number' || extensionMinutes < 0) {
+        throw new functions.https.HttpsError('invalid-argument', 'extensionMinutes must be a non-negative number.');
+      }
+      updates.extensionMinutes = extensionMinutes;
+    }
+
+    if (type !== undefined) {
+      if (!['timed', 'live'].includes(type)) {
+        throw new functions.https.HttpsError('invalid-argument', 'type must be timed or live.');
+      }
+      updates.type = type;
+    }
+
+    transaction.update(auctionRef, updates);
+  });
+
+  return { success: true };
+});
+
+// ─────────────────────────────────────────────────────────────
 // getUserBidAnalytics — Callable (unchanged)
 // ─────────────────────────────────────────────────────────────
 export const getUserBidAnalytics = functions.region('asia-south1').https.onCall(async (data, context) => {
@@ -447,41 +671,74 @@ export const getUserBidAnalytics = functions.region('asia-south1').https.onCall(
   const userId = context.auth.uid;
 
   try {
-    const bidsSnapshot = await db.collectionGroup('bids').where('bidderId', '==', userId).get();
-    
+    const bidsSnapshot = await db
+      .collectionGroup('bids')
+      .where('bidderId', '==', userId)
+      .orderBy('timestamp', 'desc')
+      .get();
+
     const auctionIds = new Set<string>();
-    bidsSnapshot.docs.forEach(doc => {
-      const auctionId = doc.ref.parent.parent?.id;
-      if (auctionId) auctionIds.add(auctionId);
+    const maxBidByAuction = new Map<string, number>();
+
+    bidsSnapshot.docs.forEach((doc) => {
+      const data = doc.data();
+      const amount = typeof data.amount === 'number' ? data.amount : 0;
+
+      const parts = doc.ref.path.split('/');
+      const auctionsIndex = parts.indexOf('auctions');
+      let auctionId: string | undefined;
+      if (auctionsIndex >= 0 && parts[auctionsIndex + 1]) {
+        auctionId = parts[auctionsIndex + 1];
+      } else if (typeof data.auctionId === 'string') {
+        auctionId = data.auctionId;
+      }
+
+      if (auctionId && !auctionId.includes('/')) {
+        auctionIds.add(auctionId);
+        const existing = maxBidByAuction.get(auctionId) || 0;
+        if (amount > existing) {
+          maxBidByAuction.set(auctionId, amount);
+        }
+      }
     });
 
     const uniqueAuctionIds = Array.from(auctionIds);
-    
+
     if (uniqueAuctionIds.length === 0) {
       return {
         totalParticipated: 0,
         activeBids: 0,
         wonItems: 0,
-        winRate: 0
+        winRate: 0,
+        activeBidExposure: 0,
       };
     }
 
     const chunkSize = 30;
     const auctionDocs: admin.firestore.DocumentData[] = [];
-    
+
     for (let i = 0; i < uniqueAuctionIds.length; i += chunkSize) {
-      const chunk = uniqueAuctionIds.slice(i, i + chunkSize);
-      const snapshot = await db.collection('auctions').where(admin.firestore.FieldPath.documentId(), 'in', chunk).get();
-      snapshot.docs.forEach(d => auctionDocs.push({ id: d.id, ...d.data() }));
+      const chunk = uniqueAuctionIds.slice(i, i + chunkSize).filter(Boolean);
+      if (chunk.length === 0) continue;
+
+      const snapshot = await db
+        .collection('auctions')
+        .where(admin.firestore.FieldPath.documentId(), 'in', chunk)
+        .get();
+      snapshot.docs.forEach((d) => auctionDocs.push({ id: d.id, ...d.data() }));
     }
 
     let activeBids = 0;
     let wonItems = 0;
     let endedAuctionsParticipated = 0;
+    let activeBidExposure = 0;
 
     for (const auction of auctionDocs) {
-      const isEnded = auction.status === 'ended' || new Date(auction.endsAt).getTime() < Date.now();
-      
+      const endsAtMs = parseAuctionEndsAt(auction.endsAt);
+      const isEnded =
+        auction.status === 'ended' ||
+        (endsAtMs > 0 && endsAtMs < Date.now());
+
       if (isEnded) {
         endedAuctionsParticipated++;
         if (auction.winnerId === userId) {
@@ -489,21 +746,41 @@ export const getUserBidAnalytics = functions.region('asia-south1').https.onCall(
         }
       } else {
         activeBids++;
+        activeBidExposure += maxBidByAuction.get(auction.id) || 0;
       }
     }
 
-    const winRate = endedAuctionsParticipated > 0 
-      ? Math.round((wonItems / endedAuctionsParticipated) * 100) 
-      : 0;
+    const winRate =
+      endedAuctionsParticipated > 0
+        ? Math.round((wonItems / endedAuctionsParticipated) * 100)
+        : 0;
 
     return {
       totalParticipated: uniqueAuctionIds.length,
       activeBids,
       wonItems,
-      winRate
+      winRate,
+      activeBidExposure,
     };
   } catch (error) {
-    console.error("Error calculating bid analytics:", error);
+    console.error('Error calculating bid analytics:', error);
     throw new functions.https.HttpsError('internal', 'Unable to calculate analytics.');
   }
 });
+
+function parseAuctionEndsAt(endsAt: unknown): number {
+  if (!endsAt) return 0;
+  if (typeof endsAt === 'string') {
+    const ms = new Date(endsAt).getTime();
+    return Number.isNaN(ms) ? 0 : ms;
+  }
+  if (
+    typeof endsAt === 'object' &&
+    endsAt !== null &&
+    'toDate' in endsAt &&
+    typeof (endsAt as admin.firestore.Timestamp).toDate === 'function'
+  ) {
+    return (endsAt as admin.firestore.Timestamp).toDate().getTime();
+  }
+  return 0;
+}

@@ -4,9 +4,10 @@ import { db } from './config';
 import { assertAppCheck } from './utils/app-check';
 import { assertRateLimit } from './utils/rate-limit';
 import { validateFollowPayload, validateChatMessagePayload } from './utils/schema-validation';
+import { FIRESTORE_TRIGGER_REGION } from './constants/regions';
 
 // Aggregation for comments count on posts
-export const onCommentAdded = functions.region('asia-south1').firestore
+export const onCommentAdded = functions.region(FIRESTORE_TRIGGER_REGION).firestore
   .document('posts/{postId}/comments/{commentId}')
   .onCreate(async (snap, context) => {
     const postId = context.params.postId;
@@ -21,7 +22,7 @@ export const onCommentAdded = functions.region('asia-south1').firestore
     }
   });
 
-export const onCommentRemoved = functions.region('asia-south1').firestore
+export const onCommentRemoved = functions.region(FIRESTORE_TRIGGER_REGION).firestore
   .document('posts/{postId}/comments/{commentId}')
   .onDelete(async (snap, context) => {
     const postId = context.params.postId;
