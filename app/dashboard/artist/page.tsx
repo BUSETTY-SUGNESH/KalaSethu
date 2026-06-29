@@ -150,6 +150,14 @@ export default function ArtistStudioPage() {
                 </div>
                 <div className="text-body-md text-primary font-bold">₹{item.price.toLocaleString('en-IN')}</div>
                 <div className="flex gap-8">
+                  <Link
+                    href={`/dashboard/artist/edit/${item.id}`}
+                    className="btn-icon bg-surface-container-high rounded-full hover:bg-primary/10 hover:text-primary transition-colors text-primary"
+                    title="Edit Artwork"
+                    style={{ width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center" }}
+                  >
+                    <Icon name="edit" size={20} />
+                  </Link>
                   <button 
                     onClick={() => handleDelete(item.id)}
                     className="btn-icon bg-surface-container-high rounded-full hover:bg-error/10 hover:text-error transition-colors text-primary"

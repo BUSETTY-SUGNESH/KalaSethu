@@ -33,13 +33,14 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendChatMessage = exports.unfollowUser = exports.followUser = exports.onFollowingRemoved = exports.onFollowingAdded = exports.onFollowerRemoved = exports.onFollowerAdded = exports.onCommentRemoved = exports.onCommentAdded = void 0;
+exports.unfollowUser = exports.followUser = exports.onFollowingRemoved = exports.onFollowingAdded = exports.onFollowerRemoved = exports.onFollowerAdded = exports.onCommentRemoved = exports.onCommentAdded = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const config_1 = require("./config");
 const app_check_1 = require("./utils/app-check");
 const rate_limit_1 = require("./utils/rate-limit");
 const schema_validation_1 = require("./utils/schema-validation");
+const community_provisioning_1 = require("./community-provisioning");
 const regions_1 = require("./constants/regions");
 // Aggregation for comments count on posts
 exports.onCommentAdded = functions.region(regions_1.FIRESTORE_TRIGGER_REGION).firestore
@@ -169,6 +170,17 @@ exports.followUser = functions.region('asia-south1').https.onCall(async (data, c
     batch.set(config_1.db.collection('users').doc(followerId).collection('following').doc(data.followingId), { userId: data.followingId, userName: data.followingName, createdAt: now });
     batch.set(config_1.db.collection('users').doc(data.followingId).collection('followers').doc(followerId), { userId: followerId, userName: followerName, createdAt: now });
     await batch.commit();
+    try {
+        const communityId = await getCommunityIdForOwner(data.followingId);
+        if (communityId) {
+            const followerSnap = await config_1.db.collection('users').doc(followerId).get();
+            const followerData = followerSnap.data();
+            await (0, community_provisioning_1.joinCommunityMember)(communityId, followerId, followerData?.displayName || followerName, followerData?.avatarUrl);
+        }
+    }
+    catch (joinError) {
+        console.error('Failed to auto-join community on follow', joinError);
+    }
     return { success: true };
 });
 exports.unfollowUser = functions.region('asia-south1').https.onCall(async (data, context) => {
@@ -188,53 +200,12 @@ exports.unfollowUser = functions.region('asia-south1').https.onCall(async (data,
     await batch.commit();
     return { success: true };
 });
-exports.sendChatMessage = functions.region('asia-south1').https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
-    }
-    (0, app_check_1.assertAppCheck)(context);
-    await (0, rate_limit_1.assertRateLimit)(context.auth.uid, 'sendChatMessage');
-    const senderId = context.auth.uid;
-    (0, schema_validation_1.validateChatMessagePayload)({
-        chatRoomId: data.chatRoomId,
-        senderId,
-        senderName: data.senderName,
-        type: data.type || 'text',
-        content: data.content,
-        mediaUrl: data.mediaUrl,
-        artworkId: data.artworkId,
-    });
-    if (data.senderId && data.senderId !== senderId) {
-        throw new functions.https.HttpsError('permission-denied', 'Sender mismatch');
-    }
-    const roomSnap = await config_1.db.collection('chatRooms').doc(data.chatRoomId).get();
-    if (!roomSnap.exists) {
-        throw new functions.https.HttpsError('not-found', 'Chat room not found');
-    }
-    const participants = roomSnap.data()?.participants || [];
-    if (!participants.includes(senderId)) {
-        throw new functions.https.HttpsError('permission-denied', 'Not a room participant');
-    }
-    const now = new Date().toISOString();
-    const messageRef = config_1.db.collection('chatRooms').doc(data.chatRoomId).collection('messages').doc();
-    await messageRef.set({
-        chatRoomId: data.chatRoomId,
-        senderId,
-        senderName: data.senderName,
-        type: data.type || 'text',
-        content: data.content,
-        mediaUrl: data.mediaUrl || null,
-        artworkId: data.artworkId || null,
-        readBy: [senderId],
-        createdAt: now,
-        isDeleted: false,
-    });
-    await config_1.db.collection('chatRooms').doc(data.chatRoomId).update({
-        lastMessage: data.content,
-        lastMessageAt: now,
-        lastMessageBy: senderId,
-        updatedAt: now,
-    });
-    return { success: true, messageId: messageRef.id };
-});
+async function getCommunityIdForOwner(ownerId) {
+    const snap = await config_1.db
+        .collection('communities')
+        .where('ownerId', '==', ownerId)
+        .limit(1)
+        .get();
+    return snap.empty ? null : snap.docs[0].id;
+}
 //# sourceMappingURL=community.js.map

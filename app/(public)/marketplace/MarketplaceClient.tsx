@@ -1,20 +1,24 @@
 'use client';
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import Icon from "@/app/components/ui/Icon";
-import Image from "next/image";
 import SectionHeader from "@/app/components/ui/SectionHeader";
 import ArtworkCard from "@/app/components/cards/ArtworkCard";
-import { getPublishedArtworks, searchArtworks } from "@/lib/services/artwork-service";
+import CategoryCollectionCard from "@/app/components/cards/CategoryCollectionCard";
+import { getPublishedArtworks, searchArtworks, getMarketplaceCategorySummaries } from "@/lib/services/artwork-service";
 import { useUIStore } from "@/lib/stores/ui-store";
 import { useAuthStore } from "@/lib/stores/auth-store";
-import type { Artwork } from "@/app/types";
+import type { Artwork, MarketplaceCategorySummary } from "@/app/types";
+import type { ArtworkPaginationCursor } from "@/lib/firebase/firestore";
+import { getCategoryLabel, isValidCategorySlug } from "@/lib/constants/artwork-categories";
 import Link from "next/link";
 
 interface MarketplaceClientProps {
   initialArtworks: Artwork[];
   initialHasMore: boolean;
-  initialCursor: unknown;
+  initialCursor: ArtworkPaginationCursor;
+  initialCategories: MarketplaceCategorySummary[];
   initialError?: string | null;
 }
 
@@ -22,6 +26,7 @@ export default function MarketplaceClient({
   initialArtworks,
   initialHasMore,
   initialCursor,
+  initialCategories,
   initialError = null
 }: MarketplaceClientProps) {
   // Global Query State
@@ -34,9 +39,12 @@ export default function MarketplaceClient({
 
   // Auth State
   const { isArtist } = useAuthStore();
+  const searchParams = useSearchParams();
+
+  const [categories, setCategories] = useState<MarketplaceCategorySummary[]>(initialCategories);
 
   const [artworks, setArtworks] = useState<Artwork[]>(marketplaceCache ? marketplaceCache.artworks : initialArtworks);
-  const [lastDoc, setLastDoc] = useState<unknown>(marketplaceCache ? marketplaceCache.lastDoc : initialCursor);
+  const [lastDoc, setLastDoc] = useState<ArtworkPaginationCursor>(marketplaceCache ? marketplaceCache.lastDoc : initialCursor);
   const [hasMore, setHasMore] = useState(marketplaceCache ? marketplaceCache.hasMore : initialHasMore);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
@@ -101,8 +109,36 @@ export default function MarketplaceClient({
     };
   }, []);
 
-  // Constants
-  const categories = ["Chola Bronzes", "Mithila", "Textiles", "Mysore Woodcraft"];
+  const hasAppliedUrlCategory = useRef(false);
+  useEffect(() => {
+    if (hasAppliedUrlCategory.current) return;
+    const categoryParam = searchParams.get('category');
+    if (categoryParam && isValidCategorySlug(categoryParam)) {
+      hasAppliedUrlCategory.current = true;
+      setActiveCategory(categoryParam);
+    }
+  }, [searchParams, setActiveCategory]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMarketplaceCategorySummaries()
+      .then((summaries) => {
+        if (!cancelled) setCategories(summaries);
+      })
+      .catch((err) => console.error('Failed to refresh categories', err));
+    return () => { cancelled = true; };
+  }, []);
+
+  const activeCategoryLabel = activeCategory
+    ? categories.find((c) => c.slug === activeCategory)?.label ?? getCategoryLabel(activeCategory)
+    : null;
+
+  const handleCategorySelect = useCallback((slug: string) => {
+    setActiveCategory(slug);
+    setSearchQuery("");
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [setActiveCategory, setSearchQuery]);
+
   const sortOptions = [
     { value: 'newest', label: 'Newest' },
     { value: 'price_low', label: 'Price: Low to High' },
@@ -230,9 +266,7 @@ export default function MarketplaceClient({
     setIsLoadingMore(true);
     setError(null);
     try {
-      // We cast lastDoc to any here to allow primitive cursors for the first client fetch, 
-      // and DocumentSnapshot for subsequent fetches.
-      const result = await getPublishedArtworks(12, lastDoc as any, {
+      const result = await getPublishedArtworks(12, lastDoc, {
         category: activeCategory || undefined,
         sortBy
       });
@@ -267,7 +301,7 @@ export default function MarketplaceClient({
                   aria-expanded={isFilterMenuOpen}
                 >
                   {!activeCategory && <Icon name="filter_list" size={18} />}
-                  {activeCategory ? activeCategory : 'FILTERS'}
+                  {activeCategoryLabel ?? 'FILTERS'}
                   {activeCategory && <Icon name="expand_more" size={18} />}
                 </button>
                 <div
@@ -313,19 +347,22 @@ export default function MarketplaceClient({
                       All Categories
                       {activeCategory === null && <Icon name="check" size={16} className="text-accent-gold" />}
                     </button>
-                    {categories.map(cat => (
+                    {categories.map((cat) => (
                       <button
-                        key={cat}
+                        key={cat.slug}
                         className="btn-ghost"
                         style={{
                           width: "100%", textAlign: "left", padding: "8px 16px", borderRadius: "var(--radius-sm)", display: "flex", justifyContent: "space-between", alignItems: "center",
-                          color: activeCategory === cat ? "var(--color-surface)" : "rgba(255,255,255,0.8)",
-                          fontWeight: activeCategory === cat ? 500 : 400
+                          color: activeCategory === cat.slug ? "var(--color-surface)" : "rgba(255,255,255,0.8)",
+                          fontWeight: activeCategory === cat.slug ? 500 : 400
                         }}
-                        onClick={() => { setActiveCategory(cat); setIsFilterMenuOpen(false); }}
+                        onClick={() => { setActiveCategory(cat.slug); setIsFilterMenuOpen(false); }}
                       >
-                        {cat}
-                        {activeCategory === cat && <Icon name="check" size={16} className="text-accent-gold" />}
+                        <span>{cat.label}</span>
+                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span className="text-label-sm" style={{ color: "rgba(255,255,255,0.5)" }}>({cat.artworkCount})</span>
+                          {activeCategory === cat.slug && <Icon name="check" size={16} className="text-accent-gold" />}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -452,6 +489,21 @@ export default function MarketplaceClient({
               <p className="text-body-md text-on-surface-variant mb-6 text-center max-w-md">
                 We couldn't find anything matching "{searchQuery}". Try modifying your search keywords or browsing our curated collections.
               </p>
+              <div className="flex flex-wrap justify-center gap-12 mb-6">
+                {categories
+                  .filter((c) => c.artworkCount > 0)
+                  .slice(0, 4)
+                  .map((cat) => (
+                    <button
+                      key={cat.slug}
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={() => handleCategorySelect(cat.slug)}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+              </div>
               <button
                 className="btn btn-outline"
                 onClick={() => setSearchQuery("")}
@@ -465,51 +517,14 @@ export default function MarketplaceClient({
         <>
           <section className="container section-gap">
             <SectionHeader title="Curated Collections" />
-            <div className="category-grid">
-              <button 
-                className="category-item span-2 span-2-row text-left"
-                style={{ position: "relative" }}
-                onClick={() => { setActiveCategory("Chola Bronzes"); setSearchQuery(""); window.scrollTo({top: 0, behavior: 'smooth'}); }}
-                aria-label="Filter by Chola Bronzes"
-              >
-                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKpT1QStD4QUN9YJvPDowhRfY4TjHRgp14IKqTk-dZPf2QVxjhCYF9Do1TBcz9kYIn25JvmAmgMFN4SiTxz-bfiSaKSqY1jZo1SuUkxPUJ6l9P-9Dm_mRR3HsGLvnppZPcalC7fwYjMPSysIjKXjym_Tw38G3BbEDWKTPLy9TFYrwQHataEMqeki-Net3suHauERIeca6ra8pSls3jpNvn9jl3MGYKzoBJJ3wpU2bcZKdffDylUtqXPcAncnx8sFJ5RrX4wOd3iRu5" alt="Bronzes" fill priority sizes="(max-width: 768px) 100vw, 50vw" />
-                <div className="category-overlay">
-                  <h3 className="text-headline-md text-on-primary">Chola Bronzes</h3>
-                </div>
-              </button>
-              <button 
-                className="category-item text-left"
-                style={{ position: "relative" }}
-                onClick={() => { setActiveCategory("Mithila"); setSearchQuery(""); window.scrollTo({top: 0, behavior: 'smooth'}); }}
-                aria-label="Filter by Mithila"
-              >
-                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuAwJlulKZjpPmd-6a2h5G6AbOOFyYz7zE9LlAwyGcRChBYoAPL9R9mjt-C0525alfJk4yEXwpUhhR_IpWw7z95hBGpGXn7oQ5ai1oIHCBJvoHQS5txRfWMGGRpf0ZTowVPizUw8d6mZ0mRC6L5LBfdUgGtILI4HYDrj8NeB1NRMG30hgZc2VL1z7YW0t2AIm_xiiGp4geGfeyayLm7fkhLan2roWFJdI1Z2o3_yXgbwrqWQSOpuUEJOTxgMpHqU8N5jHG6OUQkjbku_" alt="Paintings" fill priority sizes="(max-width: 768px) 50vw, 25vw" />
-                <div className="category-overlay">
-                  <h3 className="text-title-md text-on-primary">Mithila</h3>
-                </div>
-              </button>
-              <button 
-                className="category-item text-left"
-                style={{ position: "relative" }}
-                onClick={() => { setActiveCategory("Textiles"); setSearchQuery(""); window.scrollTo({top: 0, behavior: 'smooth'}); }}
-                aria-label="Filter by Textiles"
-              >
-                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuDfV8vS5h5VOyr5bH1vMXxhFlMIctImbzswi0rpFLIxUlOlvN6PEWJ4_L-XbD_nLEzkUM1TTOVEFoXiPg72403DPokjRM-L0_HBNz4URAwWbgdK8YN_6R7LtODUqdscYBsiwYOFTjMh7QGmg6T8i05hAlWcXldwNHJHu0XT-BLj15I0EMibTx0rrZulL2vZBAnZKbcYYUVrqeRFH-pWKxAbeh68aft4agkEoWNyqDqKVtvgR9DPhQTFd4oPNBiEIYX3WFSi8fzExVi5" alt="Textiles" fill priority sizes="(max-width: 768px) 50vw, 25vw" />
-                <div className="category-overlay">
-                  <h3 className="text-title-md text-on-primary">Textiles</h3>
-                </div>
-              </button>
-              <button 
-                className="category-item span-2 text-left"
-                style={{ position: "relative" }}
-                onClick={() => { setActiveCategory("Mysore Woodcraft"); setSearchQuery(""); window.scrollTo({top: 0, behavior: 'smooth'}); }}
-                aria-label="Filter by Mysore Woodcraft"
-              >
-                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9Nl4KAeLTkOxgSkftwoUkycNLcgMiXyRcyOC7cDH0unfRLptrT3zB7nQtdTQy8EUNLcJ5LX-HtWx3-P4QSMgZ_N0CXsbyNRvlmIjh6bTlCImv5GfUQBJi9TXzpJIx0LRPBaMbE9ufV26-po5glJ1KCm8L0L7_b2AGG_hRJYLnkKbSumOD8uv36xjarsOb3UVUO2_Wa9wsb0yQeg4aogK8cupTL7ZVZN8JcZRY_vxKJrfxrt7riLYWOgVYmSXFi3j3Fa2XolbH9bFm" alt="Woodcraft" fill priority sizes="(max-width: 768px) 100vw, 50vw" />
-                <div className="category-overlay">
-                  <h3 className="text-headline-md text-on-primary">Mysore Woodcraft</h3>
-                </div>
-              </button>
+            <div className="category-grid category-grid-marketplace">
+              {categories.map((cat) => (
+                <CategoryCollectionCard
+                  key={cat.slug}
+                  category={cat}
+                  onSelect={handleCategorySelect}
+                />
+              ))}
             </div>
           </section>
 

@@ -6,6 +6,7 @@ import Button from "@/app/components/ui/Button";
 import { getPendingReports, resolveReport, moderateArtwork } from "@/lib/services/admin-service";
 import { getPendingArtworks } from "@/lib/services/artwork-service";
 import type { Report, Artwork } from "@/app/types";
+import { getCategoryLabel } from "@/lib/constants/artwork-categories";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useUIStore } from "@/lib/stores/ui-store";
 
@@ -138,7 +139,7 @@ export default function ModerationPage() {
                     <tr key={artwork.id} className="border-b border-outline-variant hover:bg-surface-container-low/20 transition-colors">
                       <td className="p-16 font-bold text-primary">{artwork.title}</td>
                       <td className="p-16 text-on-surface-variant">{artwork.artistName}</td>
-                      <td className="p-16 capitalize text-on-surface-variant">{artwork.category}</td>
+                      <td className="p-16 text-on-surface-variant">{getCategoryLabel(artwork.category)}</td>
                       <td className="p-16 text-right">
                         <div className="flex gap-8 justify-end">
                           <Button variant="outline" size="sm" onClick={() => handleArtworkAction(artwork.id, 'reject')}>Reject</Button>

@@ -10,5 +10,7 @@ export * from "./auction";
 export * from "./payment";
 export * from "./order";
 export * from "./community";
+export * from "./messaging";
+export * from "./community-provisioning";
 export * from "./notification";
 export * from "./admin";

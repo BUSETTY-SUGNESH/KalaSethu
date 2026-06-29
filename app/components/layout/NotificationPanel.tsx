@@ -93,6 +93,11 @@ export default function NotificationPanel() {
       case 'new_like':
       case 'new_follower':
         return 'favorite';
+      case 'new_message':
+        return 'chat';
+      case 'new_community_message':
+      case 'new_mention':
+        return 'groups';
       default:
         return 'notifications';
     }

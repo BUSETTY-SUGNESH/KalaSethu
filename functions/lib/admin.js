@@ -97,6 +97,17 @@ exports.verifyArtist = functions.region('asia-south1').https.onCall(async (data,
             isRead: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
+        if (isVerified) {
+            try {
+                const targetSnap = await config_1.db.collection("users").doc(targetUserId).get();
+                const targetData = targetSnap.data();
+                const { provisionArtistCommunity } = await Promise.resolve().then(() => __importStar(require('./community-provisioning')));
+                await provisionArtistCommunity(targetUserId, targetData?.displayName || 'Artist', targetData?.avatarUrl);
+            }
+            catch (provisionError) {
+                console.error('Failed to provision artist community', provisionError);
+            }
+        }
         return { success: true, role, isVerified };
     }
     catch (error) {

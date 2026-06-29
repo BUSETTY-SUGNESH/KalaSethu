@@ -134,6 +134,7 @@ service cloud.firestore {
           'bid_placed', 'bid_outbid', 'auction_won', 'auction_lost', 'auction_ending',
           'auction_closed_artist', 'order_placed', 'order_shipped', 'order_delivered',
           'payment_received', 'new_follower', 'new_comment', 'new_like', 'new_message',
+          'new_community_message', 'new_mention',
           'artwork_approved', 'artwork_rejected', 'verification_approved',
           'verification_rejected', 'event_reminder', 'system'
         ]
@@ -154,16 +155,33 @@ service cloud.firestore {
         && request.resource.data.participants.size() <= 50
         && request.auth.uid in request.resource.data.participants
         && request.resource.data.participantNames is map
+        && request.resource.data.participantAvatars is map
         && request.resource.data.unreadCount is map
         && isValidTimestamp(request.resource.data.createdAt)
         && isValidTimestamp(request.resource.data.updatedAt);
     }
 
     function isValidChatRoomUpdate() {
-      return request.auth.uid in resource.data.participants
+      return resource.data.participants is list
+        && request.resource.data.participants is list
+        && request.auth.uid in resource.data.participants
         && request.auth.uid in request.resource.data.participants
+        && request.resource.data.participants == resource.data.participants
         && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['lastMessage', 'lastMessageAt', 'lastMessageBy', 'unreadCount', 'updatedAt']);
+    }
+
+    function isChatRoomParticipant(roomId) {
+      return exists(/databases/$(database)/documents/chatRooms/$(roomId))
+        && request.auth.uid in get(/databases/$(database)/documents/chatRooms/$(roomId)).data.participants;
+    }
+
+    // Collection-group queries on `members` (e.g. subscribeToUserCommunities) require a
+    // recursive wildcard rule — nested community rules alone do not apply to collection groups.
+    match /{path=**}/members/{memberId} {
+      allow read: if isAuthenticated()
+        && resource.data.userId == request.auth.uid;
+      allow write: if false;
     }
 
     function isValidOrderSellerUpdate() {
@@ -402,17 +420,51 @@ service cloud.firestore {
     // ── Chat Rooms ────────────────────────────────────────
 
     match /chatRooms/{roomId} {
+      // List queries must use array-contains request.auth.uid (see subscribeToRooms).
       allow read: if isAuthenticated()
         && request.auth.uid in resource.data.participants;
       allow create: if isAuthenticated() && isValidChatRoomCreate();
       allow update: if isAuthenticated() && isValidChatRoomUpdate();
 
       match /messages/{messageId} {
-        allow read: if isAuthenticated()
-          && request.auth.uid in get(/databases/$(database)/documents/chatRooms/$(roomId)).data.participants;
+        allow read: if isAuthenticated() && isChatRoomParticipant(roomId);
         allow create: if false;
         allow update: if false;
         allow delete: if false;
+      }
+    }
+
+    // ── Communities (Discord-style) ───────────────────────
+
+    match /communities/{communityId} {
+      allow read: if isAuthenticated();
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+
+      match /members/{memberId} {
+        allow read: if isAuthenticated();
+        allow write: if false;
+      }
+
+      match /channels/{channelId} {
+        allow read: if isAuthenticated();
+        allow write: if false;
+
+        match /messages/{messageId} {
+          allow read: if isAuthenticated();
+          allow write: if false;
+        }
+      }
+
+      match /pinnedMessages/{pinId} {
+        allow read: if isAuthenticated();
+        allow write: if false;
+      }
+
+      match /moderationLogs/{logId} {
+        allow read: if false;
+        allow write: if false;
       }
     }
 

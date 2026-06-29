@@ -10,6 +10,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getCountFromServer,
   setDoc as fbSetDoc,
   addDoc as fbAddDoc,
   updateDoc as fbUpdateDoc,
@@ -59,6 +60,7 @@ export const collections = {
   userCollections: () => collection(db, 'collections'),
   posts: () => collection(db, 'posts'),
   chatRooms: () => collection(db, 'chatRooms'),
+  communities: () => collection(db, 'communities'),
   events: () => collection(db, 'events'),
   workshops: () => collection(db, 'workshops'),
   notifications: () => collection(db, 'notifications'),
@@ -89,6 +91,14 @@ export const subcollections = {
     collection(db, 'posts', postId, 'likes'),
   chatMessages: (roomId: string) =>
     collection(db, 'chatRooms', roomId, 'messages'),
+  communityMembers: (communityId: string) =>
+    collection(db, 'communities', communityId, 'members'),
+  communityChannels: (communityId: string) =>
+    collection(db, 'communities', communityId, 'channels'),
+  channelMessages: (communityId: string, channelId: string) =>
+    collection(db, 'communities', communityId, 'channels', channelId, 'messages'),
+  communityPinnedMessages: (communityId: string) =>
+    collection(db, 'communities', communityId, 'pinnedMessages'),
   eventRegistrations: (eventId: string) =>
     collection(db, 'events', eventId, 'registrations'),
   workshopEnrollments: (workshopId: string) =>
@@ -109,6 +119,9 @@ export const docRef = {
   cart: (userId: string) => doc(db, 'carts', userId),
   post: (postId: string) => doc(db, 'posts', postId),
   chatRoom: (roomId: string) => doc(db, 'chatRooms', roomId),
+  community: (communityId: string) => doc(db, 'communities', communityId),
+  communityChannel: (communityId: string, channelId: string) =>
+    doc(db, 'communities', communityId, 'channels', channelId),
   event: (eventId: string) => doc(db, 'events', eventId),
   workshop: (workshopId: string) => doc(db, 'workshops', workshopId),
   notification: (notifId: string) => doc(db, 'notifications', notifId),
@@ -126,6 +139,8 @@ export function timestampToISO(timestamp: Timestamp | null | undefined): string 
 }
 
 // --- Helper: Paginated query ---
+export type ArtworkPaginationCursor = DocumentSnapshot | string | number | null;
+
 export interface PaginatedResult<T> {
   data: T[];
   lastDoc: any;
@@ -136,7 +151,7 @@ export async function paginatedQuery<T>(
   collectionRef: any,
   constraints: QueryConstraint[],
   pageSize: number,
-  lastDocument?: DocumentSnapshot | null,
+  lastDocument?: ArtworkPaginationCursor,
 ): Promise<PaginatedResult<T>> {
   const queryConstraints = [...constraints, limit(pageSize + 1)];
 
@@ -199,6 +214,7 @@ export {
   collectionGroup,
   getDoc,
   getDocs,
+  getCountFromServer,
   deleteDoc,
   query,
   where,

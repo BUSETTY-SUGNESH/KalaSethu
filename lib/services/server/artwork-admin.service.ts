@@ -1,5 +1,7 @@
 import { adminDb } from '@/lib/firebase/admin';
-import type { Artwork } from '@/app/types';
+import type { Artwork, MarketplaceCategorySummary } from '@/app/types';
+import type { ArtworkPaginationCursor } from '@/lib/firebase/firestore';
+import { ARTWORK_CATEGORIES, CATEGORY_PLACEHOLDER_IMAGE } from '@/lib/constants/artwork-categories';
 
 /**
  * Server-only service for fetching artworks using firebase-admin.
@@ -57,7 +59,7 @@ export async function getPublishedArtworksServer(
   });
 
   // Extract the sort field value from the last document for pagination
-  let lastCursor: unknown = null;
+  let lastCursor: ArtworkPaginationCursor = null;
   if (docs.length > 0) {
     const lastDoc = docs[docs.length - 1];
     const lastDocData = lastDoc.data();
@@ -79,4 +81,33 @@ export async function getPublishedArtworksServer(
     hasMore,
     lastCursor,
   };
+}
+
+export async function getMarketplaceCategorySummariesServer(): Promise<MarketplaceCategorySummary[]> {
+  return Promise.all(
+    ARTWORK_CATEGORIES.map(async ({ slug, label }) => {
+      const baseQuery = adminDb
+        .collection('artworks')
+        .where('status', '==', 'published')
+        .where('category', '==', slug);
+
+      const [countSnap, repSnap] = await Promise.all([
+        baseQuery.count().get(),
+        baseQuery.orderBy('viewCount', 'desc').limit(1).get(),
+      ]);
+
+      const repData = repSnap.docs[0]?.data();
+      const imageUrl =
+        repData?.thumbnailUrl ||
+        repData?.images?.[0]?.url ||
+        CATEGORY_PLACEHOLDER_IMAGE;
+
+      return {
+        slug,
+        label,
+        artworkCount: countSnap.data().count,
+        imageUrl,
+      };
+    })
+  );
 }

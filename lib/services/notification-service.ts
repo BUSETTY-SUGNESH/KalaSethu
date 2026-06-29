@@ -50,12 +50,24 @@ export function subscribeToNotifications(
     limit(30)
   );
 
-  return onSnapshot(q, (snapshot: any) => {
-    const notifications = snapshot.docs.map(
-      (d: any) => ({ id: d.id, ...d.data() }) as Notification
-    );
-    callback(notifications);
-  });
+  return onSnapshot(
+    q,
+    (snapshot: any) => {
+      const notifications = snapshot.docs.map(
+        (d: any) => ({ id: d.id, ...d.data() }) as Notification
+      );
+      callback(notifications);
+    },
+    (error: any) => {
+      const code = error?.code ?? 'unknown';
+      if (code === 'permission-denied') {
+        console.warn('[notifications] subscription permission-denied');
+      } else {
+        console.error('[notifications] subscription error:', error?.message ?? error);
+      }
+      callback([]);
+    }
+  );
 }
 
 // --- Get Unread Count ---

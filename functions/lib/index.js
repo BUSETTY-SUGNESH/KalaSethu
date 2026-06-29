@@ -46,6 +46,8 @@ __exportStar(require("./auction"), exports);
 __exportStar(require("./payment"), exports);
 __exportStar(require("./order"), exports);
 __exportStar(require("./community"), exports);
+__exportStar(require("./messaging"), exports);
+__exportStar(require("./community-provisioning"), exports);
 __exportStar(require("./notification"), exports);
 __exportStar(require("./admin"), exports);
 //# sourceMappingURL=index.js.map

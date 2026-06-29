@@ -2,13 +2,33 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useParams } from "next/navigation";
 import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
 import { getArtwork, incrementArtworkViews } from "@/lib/services/artwork-service";
 import { useCartStore } from "@/lib/stores/cart-store";
 import { useUIStore } from "@/lib/stores/ui-store";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import type { Artwork } from "@/app/types";
+import { getCategoryLabel } from "@/lib/constants/artwork-categories";
+
+function isPubliclyVisible(artwork: Artwork): boolean {
+  return artwork.status === 'published'
+    || (artwork.listingType === 'auction'
+      && artwork.status !== 'draft'
+      && artwork.status !== 'archived');
+}
+
+function canViewArtwork(
+  artwork: Artwork,
+  userId: string | undefined,
+  isStaff: boolean
+): boolean {
+  if (isPubliclyVisible(artwork)) return true;
+  if (userId && userId === artwork.artistId) return true;
+  return isStaff;
+}
 
 export default function ArtworkDetailsPage() {
   const params = useParams();
@@ -20,15 +40,24 @@ export default function ArtworkDetailsPage() {
   
   const addItem = useCartStore((s) => s.addItem);
   const addToast = useUIStore((s) => s.addToast);
+  const { user, isAdmin, isModerator } = useAuthStore();
 
   useEffect(() => {
     async function loadArtwork() {
       if (!artworkId) return;
+
+      setIsLoading(true);
+      setArtwork(null);
+      setActiveImageIndex(0);
+
       try {
         const data = await getArtwork(artworkId);
-        if (data) {
+        const isStaff = isAdmin() || isModerator();
+        if (data && canViewArtwork(data, user?.id, isStaff)) {
           setArtwork(data);
-          incrementArtworkViews(artworkId).catch(() => {});
+          if (data.status === 'published') {
+            incrementArtworkViews(artworkId).catch(() => {});
+          }
         }
       } catch (error) {
         console.error("Failed to load artwork", error);
@@ -38,7 +67,7 @@ export default function ArtworkDetailsPage() {
     }
     
     loadArtwork();
-  }, [artworkId]);
+  }, [artworkId, user?.id, isAdmin, isModerator]);
 
   function handleAddToCart() {
     if (!artwork) return;
@@ -107,7 +136,7 @@ export default function ArtworkDetailsPage() {
         <div className="breadcrumb">
           <Link href="/marketplace">KalaMarket</Link>
           <Icon name="chevron_right" size={16} />
-          <Link href={`/marketplace?category=${artwork.category}`}>{artwork.category}</Link>
+          <Link href={`/marketplace?category=${artwork.category}`}>{getCategoryLabel(artwork.category)}</Link>
           <Icon name="chevron_right" size={16} />
           <span className="current">{artwork.title}</span>
         </div>
@@ -117,11 +146,15 @@ export default function ArtworkDetailsPage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 64 }}>
           {/* Left Column: Image Gallery */}
           <div className="flex flex-col gap-16">
-            <div className="bg-surface-container-low" style={{ width: "100%", aspectRatio: "1/1", borderRadius: "var(--radius-md)", overflow: "hidden", border: "1px solid rgba(196, 199, 199, 0.2)" }}>
-              <img 
-                src={images[activeImageIndex].url} 
+            <div className="bg-surface-container-low" style={{ position: "relative", width: "100%", aspectRatio: "1/1", borderRadius: "var(--radius-md)", overflow: "hidden", border: "1px solid rgba(196, 199, 199, 0.2)" }}>
+              <Image
+                key={images[activeImageIndex].url}
+                src={images[activeImageIndex].url}
                 alt={artwork.title}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                fill
+                sizes="(max-width: 768px) 100vw, 50vw"
+                priority
+                style={{ objectFit: "cover" }}
               />
             </div>
             {images.length > 1 && (
@@ -132,6 +165,7 @@ export default function ArtworkDetailsPage() {
                     className="bg-surface-container-lowest" 
                     onClick={() => setActiveImageIndex(idx)}
                     style={{ 
+                      position: "relative",
                       aspectRatio: "1/1", 
                       borderRadius: "var(--radius-md)", 
                       cursor: "pointer", 
@@ -139,10 +173,12 @@ export default function ArtworkDetailsPage() {
                       overflow: "hidden" 
                     }}
                   >
-                    <img 
-                      src={img.url} 
+                    <Image
+                      src={img.url}
                       alt={`Thumbnail ${idx + 1}`}
-                      style={{ width: "100%", height: "100%", objectFit: "cover", opacity: idx === activeImageIndex ? 1 : 0.6 }}
+                      fill
+                      sizes="(max-width: 768px) 25vw, 12vw"
+                      style={{ objectFit: "cover", opacity: idx === activeImageIndex ? 1 : 0.6 }}
                     />
                   </div>
                 ))}
@@ -240,7 +276,7 @@ export default function ArtworkDetailsPage() {
                 )}
                 <li className="flex justify-between">
                   <span className="text-on-surface-variant">Category</span>
-                  <span className="capitalize">{artwork.category}</span>
+                  <span>{getCategoryLabel(artwork.category)}</span>
                 </li>
               </ul>
             </div>

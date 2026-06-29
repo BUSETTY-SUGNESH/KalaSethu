@@ -6,6 +6,7 @@ import {
   docRef,
   getDoc,
   getDocs,
+  getCountFromServer,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -16,9 +17,15 @@ import {
   increment,
   paginatedQuery,
   type DocumentSnapshot,
+  type ArtworkPaginationCursor,
   type QueryConstraint,
 } from '@/lib/firebase/firestore';
-import type { Artwork, ArtworkStatus, PaginatedResult } from '@/app/types';
+import type { Artwork, ArtworkStatus, MarketplaceCategorySummary, PaginatedResult } from '@/app/types';
+import {
+  ARTWORK_CATEGORIES,
+  CATEGORY_PLACEHOLDER_IMAGE,
+  findMatchingCategorySlugs,
+} from '@/lib/constants/artwork-categories';
 
 function getSearchTermVariants(term: string): string[] {
   const trimmed = term.trim();
@@ -84,9 +91,26 @@ export const artworkRepository = {
     );
   },
 
+  async findPublishedByArtist(
+    artistId: string,
+    pageSize: number = 20,
+    lastDoc?: DocumentSnapshot | null
+  ): Promise<PaginatedResult<Artwork>> {
+    return paginatedQuery<Artwork>(
+      collections.artworks(),
+      [
+        where('artistId', '==', artistId),
+        where('status', '==', 'published'),
+        orderBy('createdAt', 'desc'),
+      ],
+      pageSize,
+      lastDoc
+    );
+  },
+
   async findPublished(
     pageSize: number = 20,
-    lastDoc?: DocumentSnapshot | null,
+    lastDoc?: ArtworkPaginationCursor,
     filters?: {
       category?: string;
       medium?: string;
@@ -146,11 +170,51 @@ export const artworkRepository = {
     );
   },
 
+  async countPublishedByCategory(category: string): Promise<number> {
+    const q = query(
+      collections.artworks(),
+      where('status', '==', 'published'),
+      where('category', '==', category)
+    );
+    const snapshot = await getCountFromServer(q);
+    return snapshot.data().count;
+  },
+
+  async findRepresentativeByCategory(category: string): Promise<Artwork | null> {
+    const q = query(
+      collections.artworks(),
+      where('status', '==', 'published'),
+      where('category', '==', category),
+      orderBy('viewCount', 'desc'),
+      limit(1)
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    const d = snap.docs[0];
+    return { id: d.id, ...d.data() } as Artwork;
+  },
+
+  async getMarketplaceCategorySummaries(): Promise<MarketplaceCategorySummary[]> {
+    return Promise.all(
+      ARTWORK_CATEGORIES.map(async ({ slug, label }) => {
+        const [artworkCount, representative] = await Promise.all([
+          artworkRepository.countPublishedByCategory(slug),
+          artworkRepository.findRepresentativeByCategory(slug),
+        ]);
+        const imageUrl =
+          representative?.thumbnailUrl ||
+          representative?.images[0]?.url ||
+          CATEGORY_PLACEHOLDER_IMAGE;
+        return { slug, label, artworkCount, imageUrl };
+      })
+    );
+  },
+
   async searchArtworks(term: string, max: number = 30): Promise<Artwork[]> {
     const variants = getSearchTermVariants(term);
     if (variants.length === 0) return [];
 
-    const queries = variants.flatMap((variant) => [
+    const prefixQueries = variants.flatMap((variant) => [
       query(
         collections.artworks(),
         where('status', '==', 'published'),
@@ -165,15 +229,22 @@ export const artworkRepository = {
         where('artistName', '<=', variant + '\uf8ff'),
         limit(max)
       ),
+    ]);
+
+    const matchingSlugs = findMatchingCategorySlugs(term);
+    const categoryQueries = matchingSlugs.map((slug) =>
       query(
         collections.artworks(),
         where('status', '==', 'published'),
-        where('category', '==', variant),
+        where('category', '==', slug),
         limit(max)
-      ),
-    ]);
+      )
+    );
 
-    const snapshots = await Promise.all(queries.map((q) => getDocs(q)));
+    const snapshots = await Promise.all([
+      ...prefixQueries.map((q) => getDocs(q)),
+      ...categoryQueries.map((q) => getDocs(q)),
+    ]);
 
     const resultsMap = new Map<string, Artwork>();
     snapshots.forEach((snap) => {

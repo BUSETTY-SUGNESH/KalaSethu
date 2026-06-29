@@ -1,7 +1,9 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { getFeaturedArtworks } from "@/lib/services/artwork-service";
 
 // ── Seller Dashboard Home ────────────────────────────────────
 function SellerHomePage() {
@@ -169,6 +171,16 @@ function SellerHomePage() {
 
 // ── Buyer Home Page (original) ───────────────────────────────
 function BuyerHomePage() {
+  const [heroArtworkId, setHeroArtworkId] = useState<string | null>(null);
+
+  useEffect(() => {
+    getFeaturedArtworks(1)
+      .then((items) => {
+        if (items[0]?.id) setHeroArtworkId(items[0].id);
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <>
       {/* Ticker */}
@@ -202,7 +214,7 @@ function BuyerHomePage() {
               <span className="text-body-md text-on-surface">Acquired from the personal collection of the Tanjore Royal lineage, authenticated 2023.</span>
             </div>
             <div>
-              <Link href="/artwork/the-silent-ascetic" className="btn btn-primary btn-lg">
+              <Link href={heroArtworkId ? `/artwork/${heroArtworkId}` : '/marketplace'} className="btn btn-primary btn-lg">
                 View Masterpiece
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_forward</span>
               </Link>

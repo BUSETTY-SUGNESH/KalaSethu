@@ -1,0 +1,30 @@
+{
+  "rules": {
+    "presence": {
+      "$userId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $userId"
+      }
+    },
+    "typing": {
+      "dm": {
+        "$roomId": {
+          "$userId": {
+            ".read": "auth != null",
+            ".write": "auth != null && auth.uid == $userId"
+          }
+        }
+      },
+      "channel": {
+        "$communityId": {
+          "$channelId": {
+            "$userId": {
+              ".read": "auth != null",
+              ".write": "auth != null && auth.uid == $userId"
+            }
+          }
+        }
+      }
+    }
+  }
+}

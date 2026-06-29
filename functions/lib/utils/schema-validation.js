@@ -37,6 +37,7 @@ exports.validateBidPayload = validateBidPayload;
 exports.validateBidDocument = validateBidDocument;
 exports.validateOrderDocument = validateOrderDocument;
 exports.validateChatMessagePayload = validateChatMessagePayload;
+exports.validateChannelMessagePayload = validateChannelMessagePayload;
 exports.validateFollowPayload = validateFollowPayload;
 exports.validatePaymentAmount = validatePaymentAmount;
 const functions = __importStar(require("firebase-functions/v1"));
@@ -85,11 +86,23 @@ function validateChatMessagePayload(data) {
     assert(typeof data.senderName === 'string' && data.senderName.length > 0, 'Invalid senderName');
     assert(typeof data.type === 'string' && MESSAGE_TYPES.includes(data.type), 'Invalid message type');
     assert(typeof data.content === 'string' && data.content.length >= 1 && data.content.length <= 5000, 'Invalid content length');
-    if (data.mediaUrl !== undefined) {
+    if (data.mediaUrl != null && data.mediaUrl !== '') {
         assert(typeof data.mediaUrl === 'string', 'Invalid mediaUrl');
     }
-    if (data.artworkId !== undefined) {
+    if (data.artworkId != null && data.artworkId !== '') {
         assert(typeof data.artworkId === 'string', 'Invalid artworkId');
+    }
+    if (data.replyToMessageId != null && data.replyToMessageId !== '') {
+        assert(typeof data.replyToMessageId === 'string', 'Invalid replyToMessageId');
+    }
+}
+function validateChannelMessagePayload(data) {
+    assert(typeof data.communityId === 'string' && data.communityId.length > 0, 'Invalid communityId');
+    assert(typeof data.channelId === 'string' && data.channelId.length > 0, 'Invalid channelId');
+    assert(typeof data.senderName === 'string' && data.senderName.length > 0, 'Invalid senderName');
+    assert(typeof data.content === 'string' && data.content.length >= 1 && data.content.length <= 5000, 'Invalid content length');
+    if (data.type !== undefined) {
+        assert(MESSAGE_TYPES.includes(data.type), 'Invalid message type');
     }
 }
 function validateFollowPayload(data) {

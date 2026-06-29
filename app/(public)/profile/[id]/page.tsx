@@ -8,9 +8,20 @@ import Button from "@/app/components/ui/Button";
 import ArtworkCard from "@/app/components/cards/ArtworkCard";
 import { getUserProfile } from "@/lib/services/user-service";
 import { followUser, unfollowUser, isFollowing as checkIsFollowing } from "@/lib/services/community-service";
-import { getPublishedArtworks, getArtworksByArtist } from "@/lib/services/artwork-service";
+import { getArtworksByArtist, getPublishedArtworksByArtist } from "@/lib/services/artwork-service";
 import { useAuthStore } from "@/lib/stores/auth-store";
-import type { User, Artwork } from "@/app/types";
+import { useUIStore } from "@/lib/stores/ui-store";
+import { getCommunityByOwner } from "@/lib/services/community-messaging-service";
+import type { User, Artwork, Community } from "@/app/types";
+
+function canViewAllArtistArtworks(
+  profileId: string,
+  viewerId: string | undefined,
+  viewerRole: string | undefined
+): boolean {
+  if (viewerId === profileId) return true;
+  return viewerRole === 'admin' || viewerRole === 'moderator';
+}
 
 export default function PublicProfilePage() {
   const params = useParams();
@@ -18,12 +29,14 @@ export default function PublicProfilePage() {
   const profileId = params.id as string;
   
   const { user: currentUser, isAuthenticated } = useAuthStore();
+  const { addToast } = useUIStore();
   
   const [profile, setProfile] = useState<User | null>(null);
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isFollowActionLoading, setIsFollowActionLoading] = useState(false);
+  const [artistCommunity, setArtistCommunity] = useState<Community | null>(null);
 
   useEffect(() => {
     if (!profileId) return;
@@ -32,10 +45,21 @@ export default function PublicProfilePage() {
       try {
         const data = await getUserProfile(profileId);
         setProfile(data);
+        if (data && (data.role === 'verified_artist' || data.isVerified)) {
+          const community = await getCommunityByOwner(profileId);
+          setArtistCommunity(community);
+        }
         
-        // If it's an artist, load their artworks
+        // If it's an artist, load their artworks (all for owner/staff, published only for public)
         if (data && (data.role === 'artist' || data.role === 'verified_artist' || data.role === 'admin')) {
-          const artistArtworks = await getArtworksByArtist(profileId);
+          const showAll = canViewAllArtistArtworks(
+            profileId,
+            currentUser?.id,
+            currentUser?.role
+          );
+          const artistArtworks = showAll
+            ? await getArtworksByArtist(profileId)
+            : await getPublishedArtworksByArtist(profileId);
           setArtworks(artistArtworks.data);
         }
 
@@ -85,7 +109,14 @@ export default function PublicProfilePage() {
       router.push(`/login?redirect=/profile/${profileId}`);
       return;
     }
-    // Navigate to messages with this user
+    if (currentUser?.id === profileId) {
+      addToast({
+        type: 'error',
+        title: 'Cannot message yourself',
+        message: 'You cannot start a conversation with your own account.',
+      });
+      return;
+    }
     router.push(`/dashboard/messages?userId=${profileId}`);
   }
 
@@ -167,6 +198,16 @@ export default function PublicProfilePage() {
                 <Button variant="outline" icon="chat" iconPosition="left" onClick={handleMessage}>
                   Message
                 </Button>
+                {artistCommunity && (
+                  <Button
+                    variant="outline"
+                    icon="groups"
+                    iconPosition="left"
+                    onClick={() => router.push(`/dashboard/communities?community=${artistCommunity.id}`)}
+                  >
+                    Community
+                  </Button>
+                )}
               </div>
             ) : (
               <Link href="/settings/profile">

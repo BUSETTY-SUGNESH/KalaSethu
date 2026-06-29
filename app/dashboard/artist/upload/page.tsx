@@ -9,6 +9,7 @@ import { useUIStore } from "@/lib/stores/ui-store";
 import { createArtwork, deleteArtwork, publishArtwork, updateArtwork } from "@/lib/services/artwork-service";
 import { uploadMultipleFiles, validateImageFile } from "@/lib/firebase/storage";
 import type { ArtworkImage } from "@/app/types";
+import { ARTWORK_CATEGORIES } from "@/lib/constants/artwork-categories";
 
 export default function ArtworkUploadPage() {
   const router = useRouter();
@@ -185,12 +186,9 @@ export default function ArtworkUploadPage() {
                     value={category}
                     onChange={e => setCategory(e.target.value)}
                   >
-                    <option value="paintings">Paintings & Miniatures</option>
-                    <option value="bronze">Sculpture & Bronze</option>
-                    <option value="textiles">Textiles & Weaves</option>
-                    <option value="woodcraft">Woodcraft</option>
-                    <option value="jewelry">Heritage Jewelry</option>
-                    <option value="other">Other</option>
+                    {ARTWORK_CATEGORIES.map((cat) => (
+                      <option key={cat.slug} value={cat.slug}>{cat.label}</option>
+                    ))}
                   </select>
                 </div>
                 

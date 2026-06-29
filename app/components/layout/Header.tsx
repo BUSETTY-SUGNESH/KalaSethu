@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useCartStore } from "@/lib/stores/cart-store";
 import { useUIStore } from "@/lib/stores/ui-store";
+import { useChatUnreadCount } from "@/lib/hooks/use-chat-unread-count";
 import { signOut } from "@/lib/firebase/auth";
 import NotificationPanel from "./NotificationPanel";
 
@@ -24,14 +25,14 @@ export default function Header() {
   
   const { user, isAuthenticated, isArtist, isAdmin } = useAuthStore();
   const { itemCount } = useCartStore();
-  const { 
-    unreadNotificationCount, 
-    isNotificationPanelOpen, 
+  const { unreadNotificationCount, unreadMessageCount, unreadCommunityCount, isNotificationPanelOpen,
     toggleNotificationPanel, 
     setNotificationPanelOpen,
     searchQuery,
     setSearchQuery 
   } = useUIStore();
+
+  useChatUnreadCount(isAuthenticated ? user?.id : undefined);
   
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -148,6 +149,15 @@ export default function Header() {
                 </button>
                 <NotificationPanel />
               </div>
+
+              <Link href="/dashboard/messages" className="header-icon-btn relative" aria-label="Messages">
+                <span className="material-symbols-outlined">chat</span>
+                {(unreadMessageCount + unreadCommunityCount) > 0 && (
+                  <span className="badge-count">
+                    {(unreadMessageCount + unreadCommunityCount) > 99 ? '99+' : unreadMessageCount + unreadCommunityCount}
+                  </span>
+                )}
+              </Link>
 
               <Link href="/cart" className="header-icon-btn relative" aria-label="Cart">
                 <span className="material-symbols-outlined">shopping_cart</span>

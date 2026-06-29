@@ -48,6 +48,12 @@ exports.RATE_LIMITS = {
     followUser: { max: 30, windowMs: 60_000 },
     unfollowUser: { max: 30, windowMs: 60_000 },
     sendChatMessage: { max: 60, windowMs: 60_000 },
+    sendChannelMessage: { max: 60, windowMs: 60_000 },
+    editMessage: { max: 30, windowMs: 60_000 },
+    deleteMessage: { max: 30, windowMs: 60_000 },
+    toggleReaction: { max: 120, windowMs: 60_000 },
+    searchMessages: { max: 30, windowMs: 60_000 },
+    createChannel: { max: 10, windowMs: 60_000 },
 };
 async function assertRateLimit(uid, action) {
     const { max, windowMs } = exports.RATE_LIMITS[action];

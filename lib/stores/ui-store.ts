@@ -3,6 +3,7 @@
 // ============================================================
 import { create } from 'zustand';
 import type { Artwork } from '@/app/types';
+import type { ArtworkPaginationCursor } from '@/lib/firebase/firestore';
 
 interface Toast {
   id: string;
@@ -38,6 +39,10 @@ interface UIState {
   setNotificationPanelOpen: (open: boolean) => void;
   unreadNotificationCount: number;
   setUnreadNotificationCount: (count: number) => void;
+  unreadMessageCount: number;
+  setUnreadMessageCount: (count: number) => void;
+  unreadCommunityCount: number;
+  setUnreadCommunityCount: (count: number) => void;
   // Modals
   activeModal: Modal | null;
   openModal: (id: string, component: string, props?: Record<string, unknown>) => void;
@@ -52,7 +57,7 @@ interface UIState {
   // Marketplace Cache
   marketplaceCache: {
     artworks: Artwork[];
-    lastDoc: unknown;
+    lastDoc: ArtworkPaginationCursor;
     hasMore: boolean;
     searchResults: Artwork[] | null;
     scrollY: number;
@@ -92,6 +97,10 @@ export const useUIStore = create<UIState>((set) => ({
   setNotificationPanelOpen: (open) => set({ isNotificationPanelOpen: open }),
   unreadNotificationCount: 0,
   setUnreadNotificationCount: (count) => set({ unreadNotificationCount: count }),
+  unreadMessageCount: 0,
+  setUnreadMessageCount: (count) => set({ unreadMessageCount: count }),
+  unreadCommunityCount: 0,
+  setUnreadCommunityCount: (count) => set({ unreadCommunityCount: count }),
 
   // Modals
   activeModal: null,

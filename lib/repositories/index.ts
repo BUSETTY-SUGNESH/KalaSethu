@@ -9,6 +9,7 @@ import { artworkRepository } from './firestore/artwork.repository';
 import { auctionRepository } from './firestore/auction.repository';
 import { orderRepository } from './firestore/order.repository';
 import { communityRepository } from './firestore/community.repository';
+import { communityMessagingRepository } from './firestore/community-messaging.repository';
 import { chatRepository } from './firestore/chat.repository';
 import { eventRepository } from './firestore/event.repository';
 import { notificationRepository } from './firestore/notification.repository';
@@ -22,6 +23,7 @@ export {
   orderRepository,
   communityRepository,
   chatRepository,
+  communityMessagingRepository,
   eventRepository,
   notificationRepository,
   adminRepository,

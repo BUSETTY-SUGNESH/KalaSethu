@@ -133,6 +133,13 @@ export interface Tag {
   usageCount: number;
 }
 
+export interface MarketplaceCategorySummary {
+  slug: string;
+  label: string;
+  artworkCount: number;
+  imageUrl: string;
+}
+
 // ── Auction ─────────────────────────────────────────────────
 export type AuctionType = 'timed' | 'live';
 export type AuctionStatus = 'scheduled' | 'live' | 'ending_soon' | 'ended' | 'cancelled' | 'completed';
@@ -401,22 +408,110 @@ export interface ChatRoom {
 }
 
 export type MessageType = 'text' | 'image' | 'artwork' | 'system';
+export type MessageContextType = 'dm' | 'channel';
+export type ContentFormat = 'markdown' | 'plain' | 'rich-json';
 
 export interface Message {
   id: string;
-  chatRoomId: string;
+  contextType: MessageContextType;
+  chatRoomId?: string;
+  communityId?: string;
+  channelId?: string;
   senderId: string;
   senderName: string;
+  senderAvatar?: string;
   type: MessageType;
   content: string;
+  contentFormat?: ContentFormat;
+  contentLower?: string;
   mediaUrl?: string;
   artworkId?: string;
-  // Status
+  replyToMessageId?: string;
+  replyToPreview?: string;
+  mentionUserIds?: string[];
+  reactions?: Record<string, string[]>;
   readBy: string[];
-  // Metadata
+  deliveredTo?: string[];
+  pinnedAt?: string;
+  pinnedBy?: string;
+  threadId?: string;
   createdAt: string;
   editedAt?: string;
   isDeleted: boolean;
+  deletedBy?: string;
+}
+
+// ── Communities (Discord-style) ─────────────────────────────
+export type CommunityRole = 'owner' | 'admin' | 'moderator' | 'member';
+export type ChannelType = 'text' | 'voice';
+
+export interface Community {
+  id: string;
+  ownerId: string;
+  name: string;
+  slug: string;
+  avatarUrl?: string;
+  bannerUrl?: string;
+  description?: string;
+  followerCount: number;
+  memberCount: number;
+  isAutoProvisioned: boolean;
+  settings?: {
+    announcementsReadOnly?: boolean;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CommunityMember {
+  id: string;
+  userId: string;
+  communityId: string;
+  role: CommunityRole;
+  displayName: string;
+  avatarUrl?: string;
+  nickname?: string;
+  isBanned: boolean;
+  mutedUntil?: string;
+  joinedAt: string;
+}
+
+export interface CommunityChannel {
+  id: string;
+  communityId: string;
+  name: string;
+  type: ChannelType;
+  topic?: string;
+  position: number;
+  isDefault: boolean;
+  isAnnouncements?: boolean;
+  lastMessage?: string;
+  lastMessageAt?: string;
+  lastMessageBy?: string;
+  unreadCount: Record<string, number>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PinnedMessage {
+  id: string;
+  communityId: string;
+  channelId: string;
+  messageId: string;
+  pinnedBy: string;
+  pinnedAt: string;
+}
+
+export interface ModerationLog {
+  id: string;
+  communityId: string;
+  channelId?: string;
+  messageId?: string;
+  targetUserId?: string;
+  moderatorId: string;
+  action: 'delete_message' | 'ban' | 'unban' | 'timeout';
+  reason?: string;
+  createdAt: string;
 }
 
 // ── Events & Workshops ──────────────────────────────────────
@@ -533,6 +628,8 @@ export type NotificationType =
   | 'new_comment'
   | 'new_like'
   | 'new_message'
+  | 'new_community_message'
+  | 'new_mention'
   | 'artwork_approved'
   | 'artwork_rejected'
   | 'verification_approved'
@@ -550,7 +647,7 @@ export interface Notification {
   actionUrl?: string;
   // Related entities
   relatedId?: string;
-  relatedType?: 'artwork' | 'auction' | 'order' | 'user' | 'post' | 'event';
+  relatedType?: 'artwork' | 'auction' | 'order' | 'user' | 'post' | 'event' | 'message' | 'community';
   // Status
   isRead: boolean;
   // Metadata
@@ -573,7 +670,7 @@ export interface Report {
   reporterId: string;
   reporterName: string;
   targetId: string;
-  targetType: 'artwork' | 'user' | 'post' | 'comment' | 'auction';
+  targetType: 'artwork' | 'user' | 'post' | 'comment' | 'auction' | 'message';
   reason: ReportReason;
   description: string;
   evidence?: string[];
