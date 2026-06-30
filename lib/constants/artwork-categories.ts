@@ -9,7 +9,9 @@ export const ARTWORK_CATEGORIES = [
 
 export type ArtworkCategorySlug = (typeof ARTWORK_CATEGORIES)[number]['slug'];
 
-export const CATEGORY_PLACEHOLDER_IMAGE = 'https://placehold.co/600x400?text=Heritage+Art';
+import { ARTWORK_PLACEHOLDER } from '@/lib/constants/placeholders';
+
+export const CATEGORY_PLACEHOLDER_IMAGE = ARTWORK_PLACEHOLDER;
 
 const slugToLabel = new Map(ARTWORK_CATEGORIES.map((c) => [c.slug, c.label]));
 

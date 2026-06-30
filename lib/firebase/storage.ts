@@ -119,6 +119,10 @@ export async function uploadAvatar(
   file: File,
   onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadResult> {
+  const validationError = validateImageFile(file);
+  if (validationError) {
+    throw new Error(validationError);
+  }
   return uploadFile(file, `users/${userId}`, onProgress);
 }
 

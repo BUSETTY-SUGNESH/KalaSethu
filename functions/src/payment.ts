@@ -19,26 +19,21 @@ import {
   handleFulfillmentFailure,
   isNonRetryableFulfillmentError,
 } from './utils/payment-recovery';
+import { assertNotInMaintenance } from './utils/feature-flags';
 
 const CHECKOUT_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const RECONCILE_BATCH_SIZE = 20;
 const RECONCILE_MIN_AGE_MS = 5 * 60 * 1000;
 
 function getRazorpayKeys(): { key_id?: string; key_secret?: string } {
-  const legacyConfig = typeof (ff as { config?: () => { razorpay?: { key_id?: string; key_secret?: string } } }).config === 'function'
-    ? (ff as { config: () => { razorpay?: { key_id?: string; key_secret?: string } } }).config()
-    : {};
   return {
-    key_id: process.env.RAZORPAY_KEY_ID || legacyConfig.razorpay?.key_id,
-    key_secret: process.env.RAZORPAY_KEY_SECRET || legacyConfig.razorpay?.key_secret,
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
   };
 }
 
 function getWebhookSecret(): string | undefined {
-  const legacyConfig = typeof (ff as { config?: () => { razorpay?: { webhook_secret?: string } } }).config === 'function'
-    ? (ff as { config: () => { razorpay?: { webhook_secret?: string } } }).config()
-    : {};
-  return process.env.RAZORPAY_WEBHOOK_SECRET || legacyConfig.razorpay?.webhook_secret;
+  return process.env.RAZORPAY_WEBHOOK_SECRET;
 }
 
 interface OrderShippingAddress {
@@ -332,6 +327,7 @@ export const createOrder = ff.region('asia-south1').https.onCall(async (data, co
 
   assertAppCheck(context);
   await assertRateLimit(context.auth.uid, 'paymentCreateOrder');
+  await assertNotInMaintenance(context.auth.uid);
 
   const { items, amount, currency = "INR", shippingAddress } = data as {
     items?: ClientOrderItem[];
@@ -410,6 +406,7 @@ export const verifyPayment = ff.region('asia-south1').https.onCall(async (data, 
 
   assertAppCheck(context);
   await assertRateLimit(context.auth.uid, 'verifyPayment');
+  await assertNotInMaintenance(context.auth.uid);
 
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderDetails } = data;
 

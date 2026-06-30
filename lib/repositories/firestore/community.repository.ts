@@ -27,10 +27,15 @@ import {
 } from '@/lib/firebase/firestore';
 import { functions } from '@/lib/firebase/config';
 import { httpsCallable } from 'firebase/functions';
-import type { Post, Comment, Follow, Bookmark, PaginatedResult } from '@/app/types';
+import type { Post, Comment, Follow, Bookmark, PaginatedResult, CommunityContributor, UserRole } from '@/app/types';
 
 export const communityRepository = {
   // ── Posts ──────────────────────────────────────────────────
+  // Composite indexes (firestore.indexes.json → collectionGroup: posts):
+  //   getFeed / getRecentPosts → createdAt DESC (single-field, automatic)
+  //   getTrending              → isTrending ASC + likeCount DESC
+  //   getByAuthor              → authorId ASC + createdAt DESC
+  //   getByCategory            → category ASC + createdAt DESC
 
   async findPost(id: string): Promise<Post | null> {
     const snap = await getDoc(docRef.post(id));
@@ -45,6 +50,14 @@ export const communityRepository = {
 
   async deletePost(id: string): Promise<void> {
     await deleteDoc(docRef.post(id));
+  },
+
+  async updatePost(id: string, data: Partial<Post>): Promise<void> {
+    const { id: _id, createdAt: _ca, ...rest } = data;
+    await updateDoc(docRef.post(id), {
+      ...rest,
+      updatedAt: new Date().toISOString(),
+    });
   },
 
   async getFeed(
@@ -81,6 +94,77 @@ export const communityRepository = {
       pageSize,
       lastDoc
     );
+  },
+
+  async getByCategory(
+    category: string,
+    pageSize: number = 20,
+    lastDoc?: DocumentSnapshot | null
+  ): Promise<PaginatedResult<Post>> {
+    return paginatedQuery<Post>(
+      collections.posts(),
+      [where('category', '==', category), orderBy('createdAt', 'desc')],
+      pageSize,
+      lastDoc
+    );
+  },
+
+  async getRecentPosts(count: number = 100): Promise<Post[]> {
+    const q = query(
+      collections.posts(),
+      orderBy('createdAt', 'desc'),
+      limit(count)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }) as Post);
+  },
+
+  aggregateTopContributors(posts: Post[], limit: number = 5): CommunityContributor[] {
+    const stats = new Map<string, {
+      authorName: string;
+      authorAvatarUrl?: string;
+      authorRole?: UserRole;
+      authorVerified: boolean;
+      postCount: number;
+      engagementScore: number;
+    }>();
+
+    for (const post of posts) {
+      const existing = stats.get(post.authorId);
+      const score = 2 + post.commentCount + post.likeCount;
+      if (existing) {
+        existing.postCount += 1;
+        existing.engagementScore += score;
+        if (!existing.authorAvatarUrl && post.authorAvatarUrl) {
+          existing.authorAvatarUrl = post.authorAvatarUrl;
+        }
+        if (!existing.authorRole && post.authorRole) {
+          existing.authorRole = post.authorRole;
+        }
+      } else {
+        stats.set(post.authorId, {
+          authorName: post.authorName,
+          authorAvatarUrl: post.authorAvatarUrl,
+          authorRole: post.authorRole,
+          authorVerified: post.authorVerified,
+          postCount: 1,
+          engagementScore: score,
+        });
+      }
+    }
+
+    return Array.from(stats.entries())
+      .map(([authorId, data]) => ({
+        authorId,
+        authorName: data.authorName,
+        authorAvatarUrl: data.authorAvatarUrl,
+        authorRole: data.authorRole ?? (data.authorVerified ? 'verified_artist' : 'user'),
+        isVerified: data.authorVerified || data.authorRole === 'verified_artist',
+        postCount: data.postCount,
+        engagementScore: data.engagementScore,
+      }))
+      .sort((a, b) => b.engagementScore - a.engagementScore)
+      .slice(0, limit);
   },
 
   // ── Likes ──────────────────────────────────────────────────

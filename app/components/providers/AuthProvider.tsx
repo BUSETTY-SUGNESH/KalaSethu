@@ -6,6 +6,7 @@
 
 import { useEffect, type ReactNode } from 'react';
 import { onAuthStateChanged } from '@/lib/firebase/auth';
+import { syncServerSession, clearServerSession } from '@/lib/auth/session-client';
 import { getUserProfile, createUserProfile, updateLastLogin } from '@/lib/services/user-service';
 import { cacheUserProfile, getCachedUserProfile } from '@/lib/auth/profile-cache';
 import { rejectIfBanned } from '@/lib/auth/banned-user';
@@ -18,7 +19,6 @@ interface AuthProviderProps {
 
 export default function AuthProvider({ children }: AuthProviderProps) {
   const { setUser, setFirebaseUser, setLoading, clearAuth } = useAuthStore();
-  const isLoading = useAuthStore((s) => s.isLoading);
   const setCartUser = useCartStore((s) => s.setCartUser);
 
   useEffect(() => {
@@ -61,6 +61,7 @@ export default function AuthProvider({ children }: AuthProviderProps) {
             setUser(profile);
             setCartUser(profile.id);
             cacheUserProfile(firebaseUser.uid, profile);
+            await syncServerSession(firebaseUser);
             // Update last login timestamp
             updateLastLogin(firebaseUser.uid).catch(() => {
               // Non-critical — silently ignore
@@ -79,6 +80,7 @@ export default function AuthProvider({ children }: AuthProviderProps) {
               console.warn('Firestore unreachable — using cached profile for auth state.');
               setUser(cached);
               setCartUser(cached.id);
+              await syncServerSession(firebaseUser);
             } else {
               console.warn('Firestore unreachable and no cached profile — denying auth until online.');
               setCartUser(null);
@@ -91,6 +93,7 @@ export default function AuthProvider({ children }: AuthProviderProps) {
           }
         }
       } else {
+        await clearServerSession();
         setCartUser(null);
         clearAuth();
       }
@@ -100,10 +103,6 @@ export default function AuthProvider({ children }: AuthProviderProps) {
 
     return () => unsubscribe();
   }, [setUser, setFirebaseUser, setLoading, clearAuth, setCartUser]);
-
-  if (isLoading) {
-    return null;
-  }
 
   return <>{children}</>;
 }

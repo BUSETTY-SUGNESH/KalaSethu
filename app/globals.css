@@ -1329,6 +1329,35 @@ h1, h2, h3, h4 { font-family: var(--font-playfair), 'Playfair Display', serif; }
   font-weight: 600;
 }
 
+/* --- Community Role Badge --- */
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.role-badge__icon {
+  font-size: 11px;
+}
+
+.role-badge--seller {
+  background: color-mix(in srgb, var(--color-accent-gold) 15%, transparent);
+  color: var(--color-accent-gold);
+  border: 1px solid var(--color-accent-gold);
+}
+
+.role-badge--buyer {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  border: 1px solid var(--color-outline-variant);
+}
+
 /* --- Alert Item --- */
 .alert-item {
   background: var(--color-surface-container-lowest);
@@ -2022,5 +2051,181 @@ h1, h2, h3, h4 { font-family: var(--font-playfair), 'Playfair Display', serif; }
 
   .image-dropzone {
     padding: 32px 16px;
+  }
+}
+
+/* --- Buyer Home (premium marketplace) --- */
+.home-section {
+  padding-bottom: 64px;
+}
+
+.home-hero-section {
+  padding-top: 48px;
+  padding-bottom: 64px;
+}
+
+.home-hero-grid {
+  display: grid;
+  grid-template-columns: 5fr 7fr;
+  gap: var(--gutter);
+  align-items: stretch;
+  min-height: min(72vh, 720px);
+}
+
+.home-hero-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  justify-content: center;
+  padding-right: 24px;
+}
+
+.home-hero-title {
+  line-height: 1.1;
+}
+
+.home-hero-description {
+  max-width: 520px;
+}
+
+.home-hero-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+}
+
+.home-hero-artist {
+  text-decoration: none;
+  transition: color var(--duration-normal) var(--ease-default);
+}
+
+.home-hero-artist:hover {
+  color: var(--color-primary);
+}
+
+.home-hero-cta {
+  align-self: flex-start;
+  margin-top: 8px;
+}
+
+.home-hero-image-wrap {
+  position: relative;
+  min-height: 420px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: block;
+}
+
+.home-artwork-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 32px;
+}
+
+.home-artwork-skeleton {
+  display: flex;
+  flex-direction: column;
+}
+
+.home-auction-scroll {
+  display: flex;
+  gap: 24px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.home-auction-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.home-auction-card {
+  flex: 0 0 min(320px, 85vw);
+  scroll-snap-align: start;
+}
+
+.home-auction-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 12px;
+}
+
+.home-auction-countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.home-auction-countdown[data-urgent] {
+  color: var(--color-status-urgency);
+}
+
+.home-community-layout {
+  gap: 48px;
+}
+
+.home-kalent-header {
+  margin-bottom: 24px;
+}
+
+.home-sold-section {
+  padding-bottom: 80px;
+}
+
+.home-cta-band {
+  padding-bottom: 80px;
+}
+
+.home-cta-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  flex-wrap: wrap;
+  padding: 48px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-low);
+  border: 1px solid rgba(196, 199, 199, 0.2);
+}
+
+.home-cta-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .home-hero-grid {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .home-hero-content {
+    order: 2;
+    padding-right: 0;
+  }
+
+  .home-hero-image-wrap {
+    order: 1;
+    min-height: 320px;
+  }
+
+  .home-cta-inner {
+    padding: 32px 24px;
+  }
+
+  .home-cta-actions {
+    width: 100%;
+  }
+
+  .home-cta-actions .btn {
+    flex: 1;
+    justify-content: center;
   }
 }

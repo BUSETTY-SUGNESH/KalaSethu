@@ -55,6 +55,7 @@ export default function NewDiscussionPage() {
           type: "discussion",
           category,
           tags: tags.length > 0 ? tags : [category],
+          authorRole: user.role,
         }
       );
 

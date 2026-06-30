@@ -64,4 +64,4 @@ export function formatOrderShippingAddress(
   };
 }
 
-export const ARTWORK_PLACEHOLDER = '/placeholder-artwork.svg';
+export { ARTWORK_PLACEHOLDER } from '@/lib/constants/placeholders';

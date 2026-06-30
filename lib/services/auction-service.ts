@@ -3,6 +3,8 @@
 // Business logic layer bridging UI to Repository layer.
 // ============================================================
 import { auctionRepository } from '@/lib/repositories';
+import { pickPrimaryAuction } from '@/lib/utils/artwork-listing-state';
+import { isAuctionAcceptingBids } from '@/lib/utils/auction-display';
 import type {
   Auction,
   AuctionFormData,
@@ -55,6 +57,11 @@ export async function createAuction(
 // --- Get Auction ---
 export async function getAuction(auctionId: string): Promise<Auction | null> {
   return auctionRepository.findById(auctionId);
+}
+
+export async function getAuctionForArtwork(artworkId: string): Promise<Auction | null> {
+  const auctions = await auctionRepository.findByArtworkId(artworkId);
+  return pickPrimaryAuction(auctions);
 }
 
 // --- Get Multiple Auctions by IDs ---
@@ -183,24 +190,7 @@ export async function updateAuction(
 
 // --- Place Bid (client-side validation only; actual bid via Cloud Function) ---
 
-/** True when bids are allowed: live/ending_soon, or scheduled with startsAt in the past. */
-export function isAuctionAcceptingBids(
-  auction: Pick<Auction, 'status' | 'startsAt' | 'endsAt'>
-): boolean {
-  if (['ended', 'cancelled', 'completed'].includes(auction.status)) {
-    return false;
-  }
-  if (new Date(auction.endsAt).getTime() < Date.now()) {
-    return false;
-  }
-  if (auction.status === 'live' || auction.status === 'ending_soon') {
-    return true;
-  }
-  if (auction.status === 'scheduled') {
-    return new Date(auction.startsAt).getTime() <= Date.now();
-  }
-  return false;
-}
+export { isAuctionAcceptingBids } from '@/lib/utils/auction-display';
 
 export function validateBid(
   auction: Auction,

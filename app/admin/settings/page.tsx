@@ -4,7 +4,9 @@ import { useState, useEffect } from "react";
 import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
 import { getFeatureFlags, setFeatureFlag } from "@/lib/services/admin-service";
+import { safeLogAdminAction } from "@/lib/utils/admin-audit";
 import type { FeatureFlag } from "@/app/types";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import { useUIStore } from "@/lib/stores/ui-store";
 
 const DEFAULT_FLAGS = [
@@ -17,6 +19,7 @@ const DEFAULT_FLAGS = [
 export default function SettingsPage() {
   const [flags, setFlags] = useState<FeatureFlag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuthStore();
   const { addToast } = useUIStore();
 
   useEffect(() => {
@@ -45,10 +48,24 @@ export default function SettingsPage() {
   }
 
   async function handleToggle(id: string, currentStatus: boolean, description?: string) {
+    if (!user) {
+      addToast({ type: 'error', title: 'Error', message: 'Authentication required.' });
+      return;
+    }
+
     try {
       const nextStatus = !currentStatus;
       await setFeatureFlag(id, nextStatus, description);
-      
+
+      await safeLogAdminAction(
+        user.id,
+        user.displayName,
+        'toggle_feature_flag',
+        id,
+        'feature_flag',
+        `Set ${id} to ${nextStatus ? 'enabled' : 'disabled'}`
+      );
+
       setFlags(flags.map(f => {
         if (f.id === id) {
           return { ...f, enabled: nextStatus };

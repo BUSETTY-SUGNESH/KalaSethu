@@ -47,23 +47,18 @@ const rate_limit_1 = require("./utils/rate-limit");
 const schema_validation_1 = require("./utils/schema-validation");
 const checkout_validation_1 = require("./utils/checkout-validation");
 const payment_recovery_1 = require("./utils/payment-recovery");
+const feature_flags_1 = require("./utils/feature-flags");
 const CHECKOUT_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const RECONCILE_BATCH_SIZE = 20;
 const RECONCILE_MIN_AGE_MS = 5 * 60 * 1000;
 function getRazorpayKeys() {
-    const legacyConfig = typeof ff.config === 'function'
-        ? ff.config()
-        : {};
     return {
-        key_id: process.env.RAZORPAY_KEY_ID || legacyConfig.razorpay?.key_id,
-        key_secret: process.env.RAZORPAY_KEY_SECRET || legacyConfig.razorpay?.key_secret,
+        key_id: process.env.RAZORPAY_KEY_ID,
+        key_secret: process.env.RAZORPAY_KEY_SECRET,
     };
 }
 function getWebhookSecret() {
-    const legacyConfig = typeof ff.config === 'function'
-        ? ff.config()
-        : {};
-    return process.env.RAZORPAY_WEBHOOK_SECRET || legacyConfig.razorpay?.webhook_secret;
+    return process.env.RAZORPAY_WEBHOOK_SECRET;
 }
 function normalizeShippingAddressForOrder(addr, buyerPhone) {
     const legacy = addr;
@@ -265,6 +260,7 @@ exports.createOrder = ff.region('asia-south1').https.onCall(async (data, context
     }
     (0, app_check_1.assertAppCheck)(context);
     await (0, rate_limit_1.assertRateLimit)(context.auth.uid, 'paymentCreateOrder');
+    await (0, feature_flags_1.assertNotInMaintenance)(context.auth.uid);
     const { items, amount, currency = "INR", shippingAddress } = data;
     if (!items || !Array.isArray(items) || items.length === 0) {
         throw new ff.https.HttpsError('invalid-argument', 'Order items are required');
@@ -322,6 +318,7 @@ exports.verifyPayment = ff.region('asia-south1').https.onCall(async (data, conte
     }
     (0, app_check_1.assertAppCheck)(context);
     await (0, rate_limit_1.assertRateLimit)(context.auth.uid, 'verifyPayment');
+    await (0, feature_flags_1.assertNotInMaintenance)(context.auth.uid);
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderDetails } = data;
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
         throw new ff.https.HttpsError('invalid-argument', 'Missing payment verification fields');

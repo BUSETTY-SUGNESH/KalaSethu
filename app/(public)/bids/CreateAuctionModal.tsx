@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import Image from 'next/image';
 import Modal from '@/app/components/ui/Modal';
 import ImageDropzone from '@/app/components/ui/ImageDropzone';
 import Button from '@/app/components/ui/Button';
@@ -12,6 +13,7 @@ import { createAndPublishArtworkForAuction } from '@/lib/services/artwork-servic
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useUIStore } from '@/lib/stores/ui-store';
 import type { Auction, AuctionFormData, AuctionType } from '@/app/types';
+import { ARTWORK_PLACEHOLDER } from '@/lib/constants/placeholders';
 
 interface CreateAuctionModalProps {
   open: boolean;
@@ -260,10 +262,13 @@ export default function CreateAuctionModal({
           <>
             <div className="modal-form-full form-group">
               <label className="form-label">Artwork</label>
-              <div className="image-dropzone-preview" style={{ aspectRatio: '16 / 6' }}>
-                <img
-                  src={editingAuction?.artworkImageUrl || 'https://placehold.co/800x400'}
+              <div className="image-dropzone-preview" style={{ aspectRatio: '16 / 6', position: 'relative' }}>
+                <Image
+                  src={editingAuction?.artworkImageUrl || ARTWORK_PLACEHOLDER}
                   alt={artworkTitle}
+                  fill
+                  sizes="(max-width: 768px) 100vw, 640px"
+                  style={{ objectFit: 'cover' }}
                 />
               </div>
               <p className="text-body-md text-primary" style={{ marginTop: 12 }}>

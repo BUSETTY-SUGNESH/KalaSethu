@@ -20,6 +20,11 @@ service firebase.storage {
       return request.resource.contentType.matches('image/.*');
     }
 
+    // Helper: Allowed avatar image types (blocks SVG and other image/* variants)
+    function isAllowedAvatarImage() {
+      return request.resource.contentType.matches('image/(jpeg|jpg|png|webp|avif)');
+    }
+
     // Helper: Check if file is a document
     function isDocument() {
       return request.resource.contentType.matches('application/pdf')
@@ -94,12 +99,12 @@ service firebase.storage {
       // Only the user can upload their own avatar
       allow create: if isAuthenticated()
         && request.auth.uid == userId
-        && isImage()
+        && isAllowedAvatarImage()
         && isUnderMaxSize(5);
 
       allow update: if isAuthenticated()
         && request.auth.uid == userId
-        && isImage()
+        && isAllowedAvatarImage()
         && isUnderMaxSize(5);
 
       allow delete: if isAuthenticated()

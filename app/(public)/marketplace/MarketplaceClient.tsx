@@ -12,6 +12,7 @@ import { useAuthStore } from "@/lib/stores/auth-store";
 import type { Artwork, MarketplaceCategorySummary } from "@/app/types";
 import type { ArtworkPaginationCursor } from "@/lib/firebase/firestore";
 import { getCategoryLabel, isValidCategorySlug } from "@/lib/constants/artwork-categories";
+import { ARTWORK_PLACEHOLDER } from "@/lib/constants/placeholders";
 import Link from "next/link";
 
 interface MarketplaceClientProps {
@@ -476,7 +477,8 @@ export default function MarketplaceClient({
                   title={item.title}
                   artist={item.artistName}
                   price={`₹${item.price.toLocaleString('en-IN')}`}
-                  imageUrl={item.thumbnailUrl || item.images[0]?.url || "https://placehold.co/600x800"}
+                  imageUrl={item.thumbnailUrl || item.images[0]?.url || ARTWORK_PLACEHOLDER}
+                  listingType={item.listingType}
                 />
               ))}
             </div>
@@ -569,7 +571,8 @@ export default function MarketplaceClient({
                       title={item.title}
                       artist={item.artistName}
                       price={`₹${item.price.toLocaleString('en-IN')}`}
-                      imageUrl={item.thumbnailUrl || item.images[0]?.url || "https://placehold.co/600x800"}
+                      imageUrl={item.thumbnailUrl || item.images[0]?.url || ARTWORK_PLACEHOLDER}
+                  listingType={item.listingType}
                     />
                   ))}
                 </div>

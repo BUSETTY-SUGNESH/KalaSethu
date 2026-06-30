@@ -6,13 +6,14 @@ import Link from "next/link";
 import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
 import ArtworkCard from "@/app/components/cards/ArtworkCard";
-import { getUserProfile } from "@/lib/services/user-service";
+import { getPublicUserProfile, type PublicUserProfile } from "@/lib/services/user-service";
 import { followUser, unfollowUser, isFollowing as checkIsFollowing } from "@/lib/services/community-service";
 import { getArtworksByArtist, getPublishedArtworksByArtist } from "@/lib/services/artwork-service";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useUIStore } from "@/lib/stores/ui-store";
 import { getCommunityByOwner } from "@/lib/services/community-messaging-service";
 import type { User, Artwork, Community } from "@/app/types";
+import { ARTWORK_PLACEHOLDER } from "@/lib/constants/placeholders";
 
 function canViewAllArtistArtworks(
   profileId: string,
@@ -23,6 +24,16 @@ function canViewAllArtistArtworks(
   return viewerRole === 'admin' || viewerRole === 'moderator';
 }
 
+function shouldShowPortfolio(
+  profile: PublicUserProfile | User,
+  profileId: string,
+  viewerId: string | undefined,
+  viewerRole: string | undefined
+): boolean {
+  if (canViewAllArtistArtworks(profileId, viewerId, viewerRole)) return true;
+  return profile.preferences?.privacy?.showPortfolio !== false;
+}
+
 export default function PublicProfilePage() {
   const params = useParams();
   const router = useRouter();
@@ -31,7 +42,7 @@ export default function PublicProfilePage() {
   const { user: currentUser, isAuthenticated } = useAuthStore();
   const { addToast } = useUIStore();
   
-  const [profile, setProfile] = useState<User | null>(null);
+  const [profile, setProfile] = useState<PublicUserProfile | User | null>(null);
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,15 +54,26 @@ export default function PublicProfilePage() {
 
     async function loadProfile() {
       try {
-        const data = await getUserProfile(profileId);
+        const data = await getPublicUserProfile(profileId, currentUser?.id);
         setProfile(data);
         if (data && (data.role === 'verified_artist' || data.isVerified)) {
           const community = await getCommunityByOwner(profileId);
           setArtistCommunity(community);
         }
-        
-        // If it's an artist, load their artworks (all for owner/staff, published only for public)
-        if (data && (data.role === 'artist' || data.role === 'verified_artist' || data.role === 'admin')) {
+
+        const portfolioVisible = data && shouldShowPortfolio(
+          data,
+          profileId,
+          currentUser?.id,
+          currentUser?.role
+        );
+
+        // If it's an artist with a visible portfolio, load artworks (all for owner/staff, published only for public)
+        if (
+          portfolioVisible
+          && data
+          && (data.role === 'artist' || data.role === 'verified_artist' || data.role === 'admin')
+        ) {
           const showAll = canViewAllArtistArtworks(
             profileId,
             currentUser?.id,
@@ -61,6 +83,8 @@ export default function PublicProfilePage() {
             ? await getArtworksByArtist(profileId)
             : await getPublishedArtworksByArtist(profileId);
           setArtworks(artistArtworks.data);
+        } else {
+          setArtworks([]);
         }
 
         // Check if current user is following this profile
@@ -145,10 +169,23 @@ export default function PublicProfilePage() {
 
   const isOwnProfile = currentUser?.id === profileId;
   const isArtist = profile.role === 'artist' || profile.role === 'verified_artist' || profile.role === 'admin';
+  const portfolioVisible = shouldShowPortfolio(
+    profile,
+    profileId,
+    currentUser?.id,
+    currentUser?.role
+  );
 
   return (
     <>
-      <div className="bg-surface-container-low border-b border-outline-variant" style={{ borderBottom: "1px solid rgba(196, 199, 199, 0.2)" }}>
+      <div
+        className="bg-surface-container-low"
+        style={{
+          borderBottomWidth: 1,
+          borderBottomStyle: "solid",
+          borderBottomColor: "rgba(196, 199, 199, 0.2)",
+        }}
+      >
         <div className="container" style={{ padding: "64px var(--margin-desktop) 48px" }}>
           <div className="flex flex-col items-center text-center">
             <div style={{ width: 120, height: 120, borderRadius: "50%", overflow: "hidden", marginBottom: 24, border: "4px solid var(--color-surface)", backgroundColor: "var(--color-surface-container-high)" }}>
@@ -175,7 +212,7 @@ export default function PublicProfilePage() {
             <div className="flex gap-24 text-body-md" style={{ marginBottom: 32 }}>
               <div><strong className="text-primary">{profile.followerCount || 0}</strong> <span className="text-on-surface-variant">Followers</span></div>
               <div><strong className="text-primary">{profile.followingCount || 0}</strong> <span className="text-on-surface-variant">Following</span></div>
-              {isArtist && (
+              {isArtist && portfolioVisible && (
                 <div><strong className="text-primary">{artworks.length}</strong> <span className="text-on-surface-variant">Artworks</span></div>
               )}
             </div>
@@ -183,6 +220,12 @@ export default function PublicProfilePage() {
             {profile.bio && (
               <p className="text-body-md text-on-surface max-w-2xl" style={{ maxWidth: 600, margin: "0 auto 32px" }}>
                 {profile.bio}
+              </p>
+            )}
+
+            {profile.email && (
+              <p className="text-body-md text-on-surface-variant" style={{ margin: "0 auto 32px" }}>
+                <a href={`mailto:${profile.email}`}>{profile.email}</a>
               </p>
             )}
 
@@ -219,7 +262,7 @@ export default function PublicProfilePage() {
       </div>
 
       <section className="container section-gap">
-        {isArtist ? (
+        {isArtist && portfolioVisible ? (
           <div>
             <h2 className="text-headline-md text-primary" style={{ marginBottom: 32 }}>Portfolio</h2>
             
@@ -232,7 +275,8 @@ export default function PublicProfilePage() {
                     title={item.title}
                     artist={item.artistName}
                     price={`₹${item.price.toLocaleString('en-IN')}`}
-                    imageUrl={item.thumbnailUrl || item.images[0]?.url || "https://placehold.co/600x800"}
+                    imageUrl={item.thumbnailUrl || item.images[0]?.url || ARTWORK_PLACEHOLDER}
+                    listingType={item.listingType}
                   />
                 ))}
               </div>

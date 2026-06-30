@@ -115,19 +115,88 @@ exports.verifyArtist = functions.region('asia-south1').https.onCall(async (data,
         throw new functions.https.HttpsError('internal', 'Failed to update verification status');
     }
 });
+const BATCH_SIZE = 500;
+async function countQuery(query) {
+    const snap = await query.count().get();
+    return snap.data().count;
+}
+function growthPercent(current, previous) {
+    if (!previous)
+        return 0;
+    return Math.round(((current - previous) / previous) * 10000) / 100;
+}
+async function sumCompletedOrderRevenue(sinceIso) {
+    let total = 0;
+    let lastDoc;
+    while (true) {
+        let query = config_1.db
+            .collection("orders")
+            .where("paymentStatus", "==", "completed");
+        if (sinceIso) {
+            query = query.where("createdAt", ">=", sinceIso);
+        }
+        query = query.limit(BATCH_SIZE);
+        if (lastDoc) {
+            query = query.startAfter(lastDoc);
+        }
+        const snap = await query.get();
+        if (snap.empty)
+            break;
+        for (const doc of snap.docs) {
+            total += doc.data().totalAmount || 0;
+        }
+        if (snap.size < BATCH_SIZE)
+            break;
+        lastDoc = snap.docs[snap.docs.length - 1];
+    }
+    return total;
+}
 // A scheduled function to aggregate analytics for the admin dashboard
 exports.aggregateAnalytics = functions.region('asia-south1').pubsub.schedule('every 24 hours').onRun(async (context) => {
     try {
-        const [usersSnap, artworksSnap, ordersSnap] = await Promise.all([
-            config_1.db.collection("users").count().get(),
-            config_1.db.collection("artworks").count().get(),
-            config_1.db.collection("orders").count().get()
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const prevSnap = await config_1.db.collection("analytics").doc("platform_stats").get();
+        const prev = prevSnap.data() || {};
+        const [totalUsers, totalArtworks, totalOrders, totalArtists, verifiedArtists, pendingVerifications, activeAuctions, activeEvents, openDisputes, dailyActiveUsers, completedOrders,] = await Promise.all([
+            countQuery(config_1.db.collection("users")),
+            countQuery(config_1.db.collection("artworks")),
+            countQuery(config_1.db.collection("orders")),
+            countQuery(config_1.db.collection("users").where("role", "in", ["artist", "verified_artist"])),
+            countQuery(config_1.db.collection("users").where("isVerified", "==", true)),
+            countQuery(config_1.db.collection("artistVerifications").where("status", "==", "pending")),
+            countQuery(config_1.db.collection("auctions").where("status", "in", ["live", "ending_soon"])),
+            countQuery(config_1.db.collection("events").where("status", "in", ["upcoming", "live"])),
+            countQuery(config_1.db.collection("orders").where("status", "==", "refund_requested")),
+            countQuery(config_1.db.collection("users").where("lastLoginAt", ">=", oneDayAgo)),
+            countQuery(config_1.db.collection("orders").where("paymentStatus", "==", "completed")),
         ]);
+        const [totalRevenue, monthlyGMV] = await Promise.all([
+            sumCompletedOrderRevenue(),
+            sumCompletedOrderRevenue(thirtyDaysAgo),
+        ]);
+        const conversionRate = totalUsers > 0
+            ? Math.round((completedOrders / totalUsers) * 10000) / 100
+            : 0;
+        const userGrowth = growthPercent(totalUsers, prev.totalUsers || 0);
+        const revenueGrowth = growthPercent(totalRevenue, prev.totalRevenue || 0);
         await config_1.db.collection("analytics").doc("platform_stats").set({
-            totalUsers: usersSnap.data().count,
-            totalArtworks: artworksSnap.data().count,
-            totalOrders: ordersSnap.data().count,
-            lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+            totalUsers,
+            totalArtists,
+            verifiedArtists,
+            totalArtworks,
+            totalOrders,
+            totalRevenue,
+            monthlyGMV,
+            activeAuctions,
+            activeEvents,
+            pendingVerifications,
+            dailyActiveUsers,
+            openDisputes,
+            conversionRate,
+            userGrowth,
+            revenueGrowth,
+            lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
         console.log("Successfully aggregated analytics");
     }

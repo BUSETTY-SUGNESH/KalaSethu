@@ -91,26 +91,123 @@ export const verifyArtist = functions.region('asia-south1').https.onCall(async (
   }
 });
 
+const BATCH_SIZE = 500;
+
+async function countQuery(
+  query: admin.firestore.Query
+): Promise<number> {
+  const snap = await query.count().get();
+  return snap.data().count;
+}
+
+function growthPercent(current: number, previous: number): number {
+  if (!previous) return 0;
+  return Math.round(((current - previous) / previous) * 10000) / 100;
+}
+
+async function sumCompletedOrderRevenue(sinceIso?: string): Promise<number> {
+  let total = 0;
+  let lastDoc: admin.firestore.QueryDocumentSnapshot | undefined;
+
+  while (true) {
+    let query: admin.firestore.Query = db
+      .collection("orders")
+      .where("paymentStatus", "==", "completed");
+
+    if (sinceIso) {
+      query = query.where("createdAt", ">=", sinceIso);
+    }
+
+    query = query.limit(BATCH_SIZE);
+    if (lastDoc) {
+      query = query.startAfter(lastDoc);
+    }
+
+    const snap = await query.get();
+    if (snap.empty) break;
+
+    for (const doc of snap.docs) {
+      total += doc.data().totalAmount || 0;
+    }
+
+    if (snap.size < BATCH_SIZE) break;
+    lastDoc = snap.docs[snap.docs.length - 1];
+  }
+
+  return total;
+}
+
 // A scheduled function to aggregate analytics for the admin dashboard
 export const aggregateAnalytics = functions.region('asia-south1').pubsub.schedule('every 24 hours').onRun(async (context) => {
   try {
-    const [usersSnap, artworksSnap, ordersSnap] = await Promise.all([
-      db.collection("users").count().get(),
-      db.collection("artworks").count().get(),
-      db.collection("orders").count().get()
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const prevSnap = await db.collection("analytics").doc("platform_stats").get();
+    const prev = prevSnap.data() || {};
+
+    const [
+      totalUsers,
+      totalArtworks,
+      totalOrders,
+      totalArtists,
+      verifiedArtists,
+      pendingVerifications,
+      activeAuctions,
+      activeEvents,
+      openDisputes,
+      dailyActiveUsers,
+      completedOrders,
+    ] = await Promise.all([
+      countQuery(db.collection("users")),
+      countQuery(db.collection("artworks")),
+      countQuery(db.collection("orders")),
+      countQuery(db.collection("users").where("role", "in", ["artist", "verified_artist"])),
+      countQuery(db.collection("users").where("isVerified", "==", true)),
+      countQuery(db.collection("artistVerifications").where("status", "==", "pending")),
+      countQuery(db.collection("auctions").where("status", "in", ["live", "ending_soon"])),
+      countQuery(db.collection("events").where("status", "in", ["upcoming", "live"])),
+      countQuery(db.collection("orders").where("status", "==", "refund_requested")),
+      countQuery(db.collection("users").where("lastLoginAt", ">=", oneDayAgo)),
+      countQuery(db.collection("orders").where("paymentStatus", "==", "completed")),
     ]);
-    
+
+    const [totalRevenue, monthlyGMV] = await Promise.all([
+      sumCompletedOrderRevenue(),
+      sumCompletedOrderRevenue(thirtyDaysAgo),
+    ]);
+
+    const conversionRate =
+      totalUsers > 0
+        ? Math.round((completedOrders / totalUsers) * 10000) / 100
+        : 0;
+
+    const userGrowth = growthPercent(totalUsers, prev.totalUsers || 0);
+    const revenueGrowth = growthPercent(totalRevenue, prev.totalRevenue || 0);
+
     await db.collection("analytics").doc("platform_stats").set({
-      totalUsers: usersSnap.data().count,
-      totalArtworks: artworksSnap.data().count,
-      totalOrders: ordersSnap.data().count,
-      lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      totalUsers,
+      totalArtists,
+      verifiedArtists,
+      totalArtworks,
+      totalOrders,
+      totalRevenue,
+      monthlyGMV,
+      activeAuctions,
+      activeEvents,
+      pendingVerifications,
+      dailyActiveUsers,
+      openDisputes,
+      conversionRate,
+      userGrowth,
+      revenueGrowth,
+      lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
-    
+
     console.log("Successfully aggregated analytics");
   } catch (error) {
     console.error("Error aggregating analytics", error);
   }
-  
+
   return null;
 });

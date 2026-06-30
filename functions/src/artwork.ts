@@ -6,6 +6,7 @@ import { artworkRepository } from './repositories/artwork.repository';
 import { userRepository } from './repositories/user.repository';
 import { assertAppCheck } from './utils/app-check';
 import { assertRateLimit } from './utils/rate-limit';
+import { assertFeatureEnabled, assertNotInMaintenance } from './utils/feature-flags';
 import { ChunkedBatchWriter } from './utils/batch-commit';
 import { FIRESTORE_TRIGGER_REGION } from './constants/regions';
 
@@ -146,6 +147,8 @@ export const submitArtworkForReview = functions.region('asia-south1').https.onCa
 
   assertAppCheck(context);
   await assertRateLimit(context.auth.uid, 'submitArtworkForReview');
+  await assertNotInMaintenance(context.auth.uid);
+  await assertFeatureEnabled('enable_artwork_uploads', 'Artwork uploads are currently disabled.');
 
   const { artworkId } = data;
   if (!artworkId || typeof artworkId !== 'string') {

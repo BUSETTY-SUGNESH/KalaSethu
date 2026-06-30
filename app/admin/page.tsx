@@ -3,16 +3,29 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Icon from "@/app/components/ui/Icon";
-import Button from "@/app/components/ui/Button";
 import { getPlatformStats, getPendingVerifications, getPendingReports } from "@/lib/services/admin-service";
-import type { ArtistVerification, Report } from "@/app/types";
+import type { ArtistVerification, Report, PlatformStats } from "@/app/types";
+
+const DEFAULT_STATS: PlatformStats = {
+  totalUsers: 0,
+  totalArtists: 0,
+  verifiedArtists: 0,
+  totalArtworks: 0,
+  totalOrders: 0,
+  totalRevenue: 0,
+  monthlyGMV: 0,
+  activeAuctions: 0,
+  activeEvents: 0,
+  pendingVerifications: 0,
+  dailyActiveUsers: 0,
+  openDisputes: 0,
+  conversionRate: 0,
+  userGrowth: 0,
+  revenueGrowth: 0,
+};
 
 export default function AdminOverviewPage() {
-  const [stats, setStats] = useState({
-    totalUsers: 0,
-    totalArtworks: 0,
-    totalOrders: 0,
-  });
+  const [stats, setStats] = useState<PlatformStats>(DEFAULT_STATS);
   const [pendingVerifications, setPendingVerifications] = useState<ArtistVerification[]>([]);
   const [flaggedContent, setFlaggedContent] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -25,15 +38,11 @@ export default function AdminOverviewPage() {
           getPendingVerifications(5),
           getPendingReports(5),
         ]);
-        
+
         if (statsData) {
-          setStats({
-            totalUsers: statsData.totalUsers || 0,
-            totalArtworks: statsData.totalArtworks || 0,
-            totalOrders: statsData.totalOrders || 0,
-          });
+          setStats({ ...DEFAULT_STATS, ...statsData });
         }
-        
+
         setPendingVerifications(verifData.data || []);
         setFlaggedContent(reportData.data || []);
       } catch (error) {
@@ -42,7 +51,7 @@ export default function AdminOverviewPage() {
         setIsLoading(false);
       }
     }
-    
+
     loadData();
   }, []);
 
@@ -74,7 +83,7 @@ export default function AdminOverviewPage() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24, marginBottom: 48 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24, marginBottom: 24 }}>
         <div className="metric-card">
           <Icon name="group" className="metric-card-watermark" />
           <span className="text-label-md text-on-surface-variant uppercase mb-4" style={{ marginBottom: 16, display: "block" }}>Total Users</span>
@@ -94,6 +103,51 @@ export default function AdminOverviewPage() {
           <span className="text-label-md text-on-surface-variant uppercase mb-4" style={{ marginBottom: 16, display: "block" }}>Total Orders</span>
           <div className="flex items-end justify-between">
             <span className="text-display-lg text-primary">{stats.totalOrders.toLocaleString()}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24, marginBottom: 48 }}>
+        <div className="metric-card">
+          <Icon name="currency_rupee" className="metric-card-watermark" />
+          <span className="text-label-md text-on-surface-variant uppercase mb-4" style={{ marginBottom: 16, display: "block" }}>Total Revenue</span>
+          <div className="flex items-end justify-between">
+            <span className="text-display-lg text-primary">₹{stats.totalRevenue.toLocaleString('en-IN')}</span>
+          </div>
+        </div>
+        <div className="metric-card">
+          <Icon name="gavel" className="metric-card-watermark" />
+          <span className="text-label-md text-on-surface-variant uppercase mb-4" style={{ marginBottom: 16, display: "block" }}>Active Auctions</span>
+          <div className="flex items-end justify-between">
+            <span className="text-display-lg text-primary">{stats.activeAuctions.toLocaleString()}</span>
+          </div>
+        </div>
+        <div className="metric-card">
+          <Icon name="event" className="metric-card-watermark" />
+          <span className="text-label-md text-on-surface-variant uppercase mb-4" style={{ marginBottom: 16, display: "block" }}>Active Events</span>
+          <div className="flex items-end justify-between">
+            <span className="text-display-lg text-primary">{stats.activeEvents.toLocaleString()}</span>
+          </div>
+        </div>
+        <div className="metric-card">
+          <Icon name="verified_user" className="metric-card-watermark" />
+          <span className="text-label-md text-on-surface-variant uppercase mb-4" style={{ marginBottom: 16, display: "block" }}>Pending Verifications</span>
+          <div className="flex items-end justify-between">
+            <span className="text-display-lg text-primary">{stats.pendingVerifications.toLocaleString()}</span>
+          </div>
+        </div>
+        <div className="metric-card">
+          <Icon name="person_check" className="metric-card-watermark" />
+          <span className="text-label-md text-on-surface-variant uppercase mb-4" style={{ marginBottom: 16, display: "block" }}>Daily Active Users</span>
+          <div className="flex items-end justify-between">
+            <span className="text-display-lg text-primary">{stats.dailyActiveUsers.toLocaleString()}</span>
+          </div>
+        </div>
+        <div className="metric-card">
+          <Icon name="trending_up" className="metric-card-watermark" />
+          <span className="text-label-md text-on-surface-variant uppercase mb-4" style={{ marginBottom: 16, display: "block" }}>Conversion Rate</span>
+          <div className="flex items-end justify-between">
+            <span className="text-display-lg text-primary">{stats.conversionRate.toFixed(1)}%</span>
           </div>
         </div>
       </div>
@@ -119,7 +173,7 @@ export default function AdminOverviewPage() {
                     <span className="text-caption text-on-surface-variant">
                       {app.submittedAt ? new Date(app.submittedAt).toLocaleDateString() : 'N/A'}
                     </span>
-                    <Link href="/admin/verification" className="text-accent-emerald">
+                    <Link href={`/admin/verification/${app.id}`} className="text-accent-emerald">
                       <Icon name="check_circle" size={24} />
                     </Link>
                   </div>

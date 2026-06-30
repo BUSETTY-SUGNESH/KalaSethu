@@ -17,7 +17,6 @@ export interface User {
   coverImageUrl?: string;
   bio?: string;
   location?: string;
-  website?: string;
   socialLinks?: {
     instagram?: string;
     twitter?: string;
@@ -338,6 +337,7 @@ export interface Post {
   authorName: string;
   authorAvatarUrl?: string;
   authorVerified: boolean;
+  authorRole?: UserRole;
   // Content
   type: PostType;
   title?: string;
@@ -356,9 +356,23 @@ export interface Post {
   shareCount: number;
   viewCount: number;
   isTrending: boolean;
+  isPinned?: boolean;
+  pinnedAt?: string;
+  pinnedBy?: string;
   // Metadata
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CommunityContributor {
+  authorId: string;
+  authorName: string;
+  authorAvatarUrl?: string;
+  authorRole: UserRole;
+  specialty?: string;
+  isVerified: boolean;
+  postCount: number;
+  engagementScore: number;
 }
 
 export interface Comment {
@@ -517,7 +531,7 @@ export interface ModerationLog {
 // ── Events & Workshops ──────────────────────────────────────
 export type EventType = 'workshop' | 'exhibition' | 'art_fair' | 'webinar' | 'deadline' | 'meetup';
 export type EventMode = 'online' | 'offline' | 'hybrid';
-export type EventStatus = 'upcoming' | 'live' | 'completed' | 'cancelled';
+export type EventStatus = 'draft' | 'upcoming' | 'live' | 'completed' | 'cancelled';
 
 export interface CalendarEvent {
   id: string;
@@ -794,6 +808,26 @@ export interface PlatformAnalytics {
   // Period
   period: 'daily' | 'weekly' | 'monthly';
   date: string;
+}
+
+/** Aggregated platform metrics written to analytics/platform_stats by Cloud Functions. */
+export interface PlatformStats {
+  totalUsers: number;
+  totalArtists: number;
+  verifiedArtists: number;
+  totalArtworks: number;
+  totalOrders: number;
+  totalRevenue: number;
+  monthlyGMV: number;
+  activeAuctions: number;
+  activeEvents: number;
+  pendingVerifications: number;
+  dailyActiveUsers: number;
+  openDisputes: number;
+  conversionRate: number;
+  userGrowth: number;
+  revenueGrowth: number;
+  lastUpdated?: string;
 }
 
 export interface ArtistAnalytics {

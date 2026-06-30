@@ -32,6 +32,18 @@ service cloud.firestore {
       return isAuthenticated() && getUserRole() in ['artist', 'verified_artist', 'admin'];
     }
 
+    function featureEnabled(flagId) {
+      return get(/databases/$(database)/documents/featureFlags/$(flagId)).data.get('enabled', true) == true;
+    }
+
+    function isMaintenanceMode() {
+      return get(/databases/$(database)/documents/featureFlags/maintenance_mode).data.get('enabled', false) == true;
+    }
+
+    function allowClientWrite() {
+      return !isMaintenanceMode() || isAdmin();
+    }
+
 
     function isValidString(field, minLen, maxLen) {
       return field is string && field.size() >= minLen && field.size() <= maxLen;
@@ -255,12 +267,16 @@ service cloud.firestore {
         || isAdmin();
 
       // Artists can create artworks (draft only)
-      allow create: if isArtist() && isValidArtworkCreate();
+      allow create: if isArtist() && isValidArtworkCreate()
+        && allowClientWrite()
+        && featureEnabled('enable_artwork_uploads');
 
       // Owner can update their artworks; admin can update any; public viewCount bump
       allow update: if (isOwner(resource.data.artistId)
           && isValidClientStatusChange()
-          && isValidArtworkOwnerUpdate())
+          && isValidArtworkOwnerUpdate()
+          && allowClientWrite()
+          && featureEnabled('enable_artwork_uploads'))
         || isAdmin()
         || isPublishedViewCountUpdate();
 
@@ -277,7 +293,9 @@ service cloud.firestore {
       allow read: if true;
 
       // Artists can create auctions for their artworks
-      allow create: if isArtist() && isValidAuctionCreate();
+      allow create: if isArtist() && isValidAuctionCreate()
+        && allowClientWrite()
+        && featureEnabled('enable_auctions');
 
       // Only Cloud Functions should update auctions (bids, status changes)
       // Allow admin for emergency overrides
@@ -396,13 +414,17 @@ service cloud.firestore {
     match /posts/{postId} {
       allow read: if true;
       allow create: if isAuthenticated()
-        && request.resource.data.authorId == request.auth.uid;
+        && request.resource.data.authorId == request.auth.uid
+        && allowClientWrite()
+        && featureEnabled('enable_social_feed');
       allow update: if isOwner(resource.data.authorId) || isModerator();
       allow delete: if isOwner(resource.data.authorId) || isModerator();
 
       match /comments/{commentId} {
         allow read: if true;
-        allow create: if isAuthenticated();
+        allow create: if isAuthenticated()
+          && allowClientWrite()
+          && featureEnabled('enable_social_feed');
         allow update: if isAuthenticated()
           && resource.data.authorId == request.auth.uid;
         allow delete: if (isAuthenticated()
@@ -412,7 +434,9 @@ service cloud.firestore {
 
       match /likes/{likeId} {
         allow read: if true;
-        allow create: if isAuthenticated();
+        allow create: if isAuthenticated()
+          && allowClientWrite()
+          && featureEnabled('enable_social_feed');
         allow delete: if isAuthenticated();
       }
     }
@@ -478,7 +502,9 @@ service cloud.firestore {
 
       match /registrations/{regId} {
         allow read: if isAuthenticated();
-        allow create: if isAuthenticated();
+        allow create: if isAuthenticated()
+          && allowClientWrite()
+          && featureEnabled('enable_social_feed');
         allow update: if isOwner(regId) || isAdmin();
         allow delete: if isOwner(regId) || isAdmin();
       }
@@ -494,7 +520,9 @@ service cloud.firestore {
 
       match /enrollments/{enrollId} {
         allow read: if isAuthenticated();
-        allow create: if isAuthenticated();
+        allow create: if isAuthenticated()
+          && allowClientWrite()
+          && featureEnabled('enable_social_feed');
         allow update: if isOwner(enrollId) || isAdmin();
       }
     }

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
 import { getPendingReports, resolveReport, moderateArtwork } from "@/lib/services/admin-service";
+import { safeLogAdminAction } from "@/lib/utils/admin-audit";
 import { getPendingArtworks } from "@/lib/services/artwork-service";
 import type { Report, Artwork } from "@/app/types";
 import { getCategoryLabel } from "@/lib/constants/artwork-categories";
@@ -61,6 +62,16 @@ export default function ModerationPage() {
         action === 'approve' ? 'approve' : 'reject',
         action === 'approve' ? 'Approved by administration.' : 'Rejected by administration.'
       );
+
+      await safeLogAdminAction(
+        user.id,
+        user.displayName,
+        'moderate_artwork',
+        artworkId,
+        'artwork',
+        action === 'approve' ? 'Approved artwork' : 'Rejected artwork'
+      );
+
       setPendingArtworks(pendingArtworks.filter(a => a.id !== artworkId));
       addToast({
         type: 'success',
@@ -84,16 +95,29 @@ export default function ModerationPage() {
 
     try {
       if (action === 'approve') {
-        // Dismiss the report
         await resolveReport(reportId, user.id, 'dismissed', 'Content reviewed and dismissed.', 'dismissed');
+        await safeLogAdminAction(
+          user.id,
+          user.displayName,
+          'resolve_report',
+          reportId,
+          targetType,
+          'Dismissed report'
+        );
         addToast({ type: 'success', title: 'Report Dismissed', message: 'The report was successfully dismissed.' });
       } else {
-        // Remove / Resolve
         if (targetType === 'artwork') {
-          // Reject artwork first (via cloud function)
           await moderateArtwork(targetId, 'reject', 'Content flagged and removed by administration.');
         }
         await resolveReport(reportId, user.id, 'resolved', 'Content flagged and removed.', `content_removed_${targetType}`);
+        await safeLogAdminAction(
+          user.id,
+          user.displayName,
+          'resolve_report',
+          reportId,
+          targetType,
+          'Removed flagged content and resolved report'
+        );
         addToast({ type: 'success', title: 'Content Removed', message: 'The content was removed and the report resolved.' });
       }
       

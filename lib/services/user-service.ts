@@ -44,6 +44,37 @@ export async function getUserProfile(uid: string): Promise<User | null> {
   return userRepository.findById(uid);
 }
 
+export type PublicUserProfile = Omit<User, 'email'> & {
+  email?: string;
+};
+
+export function sanitizePublicProfile(user: User, viewerId?: string): PublicUserProfile | User {
+  if (viewerId === user.id) {
+    return user;
+  }
+
+  const showEmail = user.preferences?.privacy?.showEmail === true;
+  const { email, preferences, ...publicFields } = user;
+
+  const sanitized: PublicUserProfile = { ...publicFields };
+  if (showEmail) {
+    sanitized.email = email;
+  }
+  if (preferences?.privacy) {
+    sanitized.preferences = { privacy: preferences.privacy };
+  }
+  return sanitized;
+}
+
+export async function getPublicUserProfile(
+  uid: string,
+  viewerId?: string
+): Promise<PublicUserProfile | User | null> {
+  const user = await getUserProfile(uid);
+  if (!user) return null;
+  return sanitizePublicProfile(user, viewerId);
+}
+
 // --- Update User Profile ---
 export async function updateUserProfile(
   uid: string,

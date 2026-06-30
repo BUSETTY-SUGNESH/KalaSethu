@@ -41,6 +41,7 @@ const artwork_repository_1 = require("./repositories/artwork.repository");
 const user_repository_1 = require("./repositories/user.repository");
 const app_check_1 = require("./utils/app-check");
 const rate_limit_1 = require("./utils/rate-limit");
+const feature_flags_1 = require("./utils/feature-flags");
 const batch_commit_1 = require("./utils/batch-commit");
 const regions_1 = require("./constants/regions");
 function isKeywordMaintenanceWrite(prevData, data) {
@@ -167,6 +168,8 @@ exports.submitArtworkForReview = functions.region('asia-south1').https.onCall(as
     }
     (0, app_check_1.assertAppCheck)(context);
     await (0, rate_limit_1.assertRateLimit)(context.auth.uid, 'submitArtworkForReview');
+    await (0, feature_flags_1.assertNotInMaintenance)(context.auth.uid);
+    await (0, feature_flags_1.assertFeatureEnabled)('enable_artwork_uploads', 'Artwork uploads are currently disabled.');
     const { artworkId } = data;
     if (!artworkId || typeof artworkId !== 'string') {
         throw new functions.https.HttpsError('invalid-argument', 'Missing artworkId');

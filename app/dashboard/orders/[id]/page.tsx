@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import Button from "@/app/components/ui/Button";
@@ -170,8 +171,14 @@ export default function OrderDetailPage() {
             <div className="flex flex-col gap-24">
               {order.items.map((item) => (
                 <div key={`${order.id}-${item.artworkId}`} className="flex gap-16">
-                  <Link href={`/artwork/${item.artworkId}`} style={{ width: 88, height: 88, borderRadius: "var(--radius-md)", overflow: "hidden", flexShrink: 0 }}>
-                    <img src={item.artworkImageUrl || ARTWORK_PLACEHOLDER} alt={item.artworkTitle} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <Link href={`/artwork/${item.artworkId}`} style={{ width: 88, height: 88, borderRadius: "var(--radius-md)", overflow: "hidden", flexShrink: 0, position: "relative", display: "block" }}>
+                    <Image
+                      src={item.artworkImageUrl || ARTWORK_PLACEHOLDER}
+                      alt={item.artworkTitle}
+                      fill
+                      sizes="88px"
+                      style={{ objectFit: "cover" }}
+                    />
                   </Link>
                   <div className="grow">
                     <Link href={`/artwork/${item.artworkId}`} className="text-title-md text-primary hover:underline">

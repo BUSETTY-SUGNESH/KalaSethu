@@ -4,12 +4,15 @@ import { useState, useEffect } from "react";
 import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
 import { getAllOrders, updateOrderStatus } from "@/lib/services/order-service";
+import { safeLogAdminAction } from "@/lib/utils/admin-audit";
 import type { Order } from "@/app/types";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import { useUIStore } from "@/lib/stores/ui-store";
 
 export default function DisputesPage() {
   const [disputes, setDisputes] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuthStore();
   const { addToast } = useUIStore();
 
   useEffect(() => {
@@ -33,15 +36,29 @@ export default function DisputesPage() {
   }
 
   async function handleResolve(orderId: string, action: 'refund' | 'dismiss') {
+    if (!user) {
+      addToast({ type: 'error', title: 'Error', message: 'Authentication required.' });
+      return;
+    }
+
     try {
       const nextStatus = action === 'refund' ? 'cancelled' : 'delivered';
-      const note = action === 'refund' 
-        ? 'Dispute resolved: Order cancelled and refund initiated by administrator.' 
+      const note = action === 'refund'
+        ? 'Dispute resolved: Order cancelled and refund initiated by administrator.'
         : 'Dispute resolved: Claim dismissed by administrator.';
-        
+
       await updateOrderStatus(orderId, nextStatus, note, 'admin', {
         paymentStatus: action === 'refund' ? 'refunded' : 'completed'
       });
+
+      await safeLogAdminAction(
+        user.id,
+        user.displayName,
+        'resolve_dispute',
+        orderId,
+        'order',
+        action === 'refund' ? 'Approved refund' : 'Dismissed dispute claim'
+      );
 
       setDisputes(disputes.filter(d => d.id !== orderId));
       addToast({

@@ -1,25 +1,73 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useUIStore } from "@/lib/stores/ui-store";
 import { getArtworksByArtist, deleteArtwork } from "@/lib/services/artwork-service";
-import type { Artwork } from "@/app/types";
+import type { Artwork, ArtworkStatus } from "@/app/types";
+import { ARTWORK_PLACEHOLDER } from "@/lib/constants/placeholders";
+
+const STATUS_FILTER_OPTIONS: { value: ArtworkStatus | 'all'; label: string }[] = [
+  { value: 'all', label: 'All Statuses' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'published', label: 'Published' },
+  { value: 'sold', label: 'Sold' },
+  { value: 'archived', label: 'Archived' },
+  { value: 'rejected', label: 'Rejected' },
+];
 
 export default function ArtistStudioPage() {
   const { user } = useAuthStore();
   const { addToast } = useUIStore();
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ArtworkStatus | 'all'>('all');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (user) {
       loadArtworks();
     }
   }, [user]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredArtworks = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return artworks.filter((item) => {
+      if (statusFilter !== 'all' && item.status !== statusFilter) {
+        return false;
+      }
+      if (!query) return true;
+      const haystack = [
+        item.title,
+        item.category,
+        item.medium,
+        ...(item.tags || []),
+      ]
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [artworks, searchQuery, statusFilter]);
+
+  const activeFilterLabel =
+    STATUS_FILTER_OPTIONS.find((opt) => opt.value === statusFilter)?.label ?? 'Filter';
 
   async function loadArtworks() {
     if (!user) return;
@@ -68,17 +116,17 @@ export default function ArtistStudioPage() {
           >
             Sales Orders
           </Button>
-          <Button 
-            variant="outline" 
-            icon="visibility" 
+          <Button
+            variant="outline"
+            icon="visibility"
             iconPosition="left"
             href={user ? `/profile/${user.id}` : "#"}
           >
             View Public Profile
           </Button>
-          <Button 
-            variant="primary" 
-            icon="add" 
+          <Button
+            variant="primary"
+            icon="add"
             iconPosition="left"
             href="/dashboard/artist/upload"
           >
@@ -106,25 +154,83 @@ export default function ArtistStudioPage() {
       </div>
 
       <h2 className="text-headline-md text-primary mb-4" style={{ marginBottom: 24 }}>Manage Inventory</h2>
-      
+
       <div className="card overflow-hidden">
         <div className="bg-surface-container-low px-6 py-4 flex justify-between items-center border-b border-outline-variant" style={{ padding: "16px 24px", borderBottom: "1px solid rgba(196, 199, 199, 0.2)" }}>
           <div className="header-search" style={{ margin: 0 }}>
             <Icon name="search" size={20} />
-            <input type="text" placeholder="Search your artworks..." disabled={artworks.length === 0} />
+            <input
+              type="text"
+              placeholder="Search your artworks..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              disabled={isLoading}
+            />
           </div>
-          <div className="flex gap-8">
-            <button className="btn btn-ghost text-label-md" disabled={artworks.length === 0}><Icon name="filter_list" size={18} /> Filter</button>
+          <div className="flex gap-8 relative" ref={filterRef}>
+            <button
+              type="button"
+              className="btn btn-ghost text-label-md"
+              disabled={isLoading}
+              onClick={() => setIsFilterOpen(!isFilterOpen)}
+              aria-haspopup="listbox"
+              aria-expanded={isFilterOpen}
+            >
+              <Icon name="filter_list" size={18} /> {statusFilter === 'all' ? 'Filter' : activeFilterLabel}
+            </button>
+            <div
+              className="dropdown-menu"
+              style={{
+                position: "absolute",
+                top: "100%",
+                right: 0,
+                marginTop: 8,
+                width: "200px",
+                backgroundColor: "var(--color-ink-charcoal)",
+                color: "var(--color-surface)",
+                borderRadius: "var(--radius-md)",
+                boxShadow: "0 12px 32px rgba(0,0,0,0.24)",
+                zIndex: 50,
+                opacity: isFilterOpen ? 1 : 0,
+                transform: isFilterOpen ? "translateY(0)" : "translateY(-8px)",
+                pointerEvents: isFilterOpen ? "auto" : "none",
+                transition: "all var(--duration-normal) var(--ease-default)",
+              }}
+            >
+              <div style={{ padding: "12px 8px" }}>
+                <div className="text-label-sm mb-2" style={{ padding: "4px 16px", color: "rgba(255,255,255,0.6)", letterSpacing: "0.05em" }}>STATUS</div>
+                {STATUS_FILTER_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className="btn-ghost"
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "8px 16px",
+                      color: statusFilter === option.value ? "var(--color-primary)" : "inherit",
+                      fontWeight: statusFilter === option.value ? 600 : 400,
+                    }}
+                    onClick={() => {
+                      setStatusFilter(option.value);
+                      setIsFilterOpen(false);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-        
+
         <div className="mod-table-header px-6 bg-surface-container-lowest text-label-sm text-on-surface-variant uppercase" style={{ padding: "16px 24px", borderBottom: "1px solid rgba(196, 199, 199, 0.2)" }}>
           <div>Artwork</div>
           <div>Status</div>
           <div>Price</div>
           <div>Actions</div>
         </div>
-        
+
         <div className="flex flex-col">
           {isLoading ? (
             <div className="flex flex-col gap-16 p-24" style={{ padding: 24 }}>
@@ -136,11 +242,23 @@ export default function ArtistStudioPage() {
             <div className="text-center p-32 text-on-surface-variant italic">
               No artworks found in your portfolio. Click "Upload Artwork" to add one.
             </div>
+          ) : filteredArtworks.length === 0 ? (
+            <div className="text-center p-32 text-on-surface-variant italic">
+              No artworks match your search or filter.
+            </div>
           ) : (
-            artworks.map((item) => (
+            filteredArtworks.map((item) => (
               <div key={item.id} className="mod-table-row px-6 hover:bg-surface-container-low transition-colors" style={{ padding: "16px 24px", borderBottom: "1px solid rgba(196, 199, 199, 0.1)" }}>
                 <div className="flex items-center gap-12">
-                  <img src={item.thumbnailUrl || "/placeholder-artwork.jpg"} alt={item.title} style={{ width: 48, height: 48, borderRadius: "var(--radius-sm)", objectFit: "cover" }} />
+                  <div style={{ width: 48, height: 48, borderRadius: "var(--radius-sm)", overflow: "hidden", position: "relative", flexShrink: 0 }}>
+                    <Image
+                      src={item.thumbnailUrl || ARTWORK_PLACEHOLDER}
+                      alt={item.title}
+                      fill
+                      sizes="48px"
+                      style={{ objectFit: "cover" }}
+                    />
+                  </div>
                   <span className="text-title-md text-primary">{item.title}</span>
                 </div>
                 <div>
@@ -158,7 +276,7 @@ export default function ArtistStudioPage() {
                   >
                     <Icon name="edit" size={20} />
                   </Link>
-                  <button 
+                  <button
                     onClick={() => handleDelete(item.id)}
                     className="btn-icon bg-surface-container-high rounded-full hover:bg-error/10 hover:text-error transition-colors text-primary"
                     title="Delete Artwork"

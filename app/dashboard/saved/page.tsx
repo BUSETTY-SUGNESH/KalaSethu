@@ -10,6 +10,7 @@ import { getUserBookmarks, toggleBookmark } from "@/lib/services/community-servi
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useUIStore } from "@/lib/stores/ui-store";
 import type { Artwork } from "@/app/types";
+import { ARTWORK_PLACEHOLDER } from "@/lib/constants/placeholders";
 
 export default function SavedArtworksPage() {
   const { user } = useAuthStore();
@@ -108,7 +109,8 @@ export default function SavedArtworksPage() {
                 title={artwork.title}
                 artist={artwork.artistName}
                 price={`Rs. ${artwork.price.toLocaleString("en-IN")}`}
-                imageUrl={artwork.thumbnailUrl || artwork.images[0]?.url || "https://placehold.co/600x800"}
+                imageUrl={artwork.thumbnailUrl || artwork.images[0]?.url || ARTWORK_PLACEHOLDER}
+                listingType={artwork.listingType}
               />
               <Button variant="ghost" size="sm" onClick={() => handleRemove(artwork.id)}>
                 Remove from saved

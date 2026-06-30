@@ -9,12 +9,22 @@ import { toggleBookmark } from "@/lib/services/community-service";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useUIStore } from "@/lib/stores/ui-store";
 
+import { artworkDetailPath } from '@/lib/utils/artwork-listing-state';
+import type { ArtworkListingType } from '@/app/types';
+
 interface ArtworkCardProps {
   id: string;
   title: string;
   artist: string;
   price: string;
   imageUrl: string;
+  listingType?: ArtworkListingType;
+  ctaLabel?: string;
+}
+
+function defaultCtaLabel(listingType?: ArtworkListingType): string {
+  if (listingType === 'auction') return 'Place Bid';
+  return 'Buy Now';
 }
 
 export default function ArtworkCard({
@@ -23,6 +33,8 @@ export default function ArtworkCard({
   artist,
   price,
   imageUrl,
+  listingType,
+  ctaLabel,
 }: ArtworkCardProps) {
   const router = useRouter();
   const { user, isAuthenticated } = useAuthStore();
@@ -30,9 +42,12 @@ export default function ArtworkCard({
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  const detailHref = artworkDetailPath(id);
+  const actionLabel = ctaLabel ?? defaultCtaLabel(listingType);
+
   async function handleToggleFavorite() {
     if (!isAuthenticated || !user) {
-      router.push(`/login?redirect=/artwork/${id}`);
+      router.push(`/login?redirect=${detailHref}`);
       return;
     }
 
@@ -66,7 +81,7 @@ export default function ArtworkCard({
         >
           <Icon name={isSaved ? "favorite" : "favorite_border"} size={20} />
         </button>
-        <Link href={`/artwork/${id}`} style={{ display: 'block', position: 'absolute', inset: 0 }}>
+        <Link href={detailHref} style={{ display: 'block', position: 'absolute', inset: 0 }}>
           <Image 
             src={imageUrl} 
             alt={title} 
@@ -77,7 +92,7 @@ export default function ArtworkCard({
         </Link>
       </div>
       <div className="artwork-card-meta">
-        <Link href={`/artwork/${id}`}>
+        <Link href={detailHref}>
           <h3 className="text-title-md text-primary truncate">{title}</h3>
         </Link>
         <div className="artwork-card-artist text-label-sm text-on-surface-variant uppercase">
@@ -87,11 +102,11 @@ export default function ArtworkCard({
         <div className="artwork-card-price-row">
           <span className="text-price text-primary">{price}</span>
           <Link
-            href={`/artwork/${id}`}
+            href={detailHref}
             className="text-label-sm text-accent-gold uppercase"
             style={{ fontWeight: 700, letterSpacing: "0.05em" }}
           >
-            Buy Now
+            {actionLabel}
           </Link>
         </div>
       </div>

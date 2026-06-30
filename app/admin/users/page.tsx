@@ -4,13 +4,16 @@ import { useState, useEffect } from "react";
 import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
 import { getAllUsers, searchUsers, setUserBannedStatus } from "@/lib/services/user-service";
+import { safeLogAdminAction } from "@/lib/utils/admin-audit";
 import type { User } from "@/app/types";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import { useUIStore } from "@/lib/stores/ui-store";
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const { user } = useAuthStore();
   const { addToast } = useUIStore();
 
   useEffect(() => {
@@ -48,10 +51,24 @@ export default function UsersPage() {
   }
 
   async function toggleStatus(uid: string, currentBannedStatus: boolean) {
+    if (!user) {
+      addToast({ type: 'error', title: 'Error', message: 'Authentication required.' });
+      return;
+    }
+
     try {
       const nextStatus = !currentBannedStatus;
       await setUserBannedStatus(uid, nextStatus);
-      
+
+      await safeLogAdminAction(
+        user.id,
+        user.displayName,
+        nextStatus ? 'ban_user' : 'unban_user',
+        uid,
+        'user',
+        nextStatus ? 'Suspended user account' : 'Activated user account'
+      );
+
       setUsers(users.map(u => {
         if (u.id === uid) {
           return { ...u, isBanned: nextStatus };

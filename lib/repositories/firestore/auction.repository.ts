@@ -121,6 +121,17 @@ export const auctionRepository = {
     return snap.docs.map(d => ({ id: d.id, ...d.data() }) as Auction);
   },
 
+  async findByArtworkId(artworkId: string): Promise<Auction[]> {
+    const q = query(
+      collections.auctions(),
+      where('artworkId', '==', artworkId),
+      orderBy('createdAt', 'desc'),
+      limit(10)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Auction);
+  },
+
   async findByArtist(
     artistId: string,
     pageSize: number = 20,

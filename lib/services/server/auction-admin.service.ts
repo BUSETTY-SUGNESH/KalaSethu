@@ -1,6 +1,7 @@
 import { adminDb } from '@/lib/firebase/admin';
 import type { Auction, Bid } from '@/app/types';
 import { AUCTION_BID_HISTORY_LIMIT } from '@/lib/constants/auction';
+import { pickPrimaryAuction } from '@/lib/utils/artwork-listing-state';
 
 /** Firestore document IDs must be non-empty strings without slashes. */
 export function isValidAuctionId(id: unknown): id is string {
@@ -75,11 +76,40 @@ export async function getAuctionBidsServer(auctionId: string): Promise<Bid[]> {
       const data = doc.data();
       return {
         id: doc.id,
+        auctionId,
         ...data,
       } as Bid;
     });
   } catch (error) {
     console.error(`Error fetching bids for auction ${auctionId} server-side:`, error);
     return [];
+  }
+}
+
+export async function getAuctionForArtworkServer(artworkId: string): Promise<Auction | null> {
+  if (typeof artworkId !== 'string' || !artworkId.trim()) return null;
+
+  try {
+    const snapshot = await adminDb
+      .collection('auctions')
+      .where('artworkId', '==', artworkId)
+      .orderBy('createdAt', 'desc')
+      .limit(10)
+      .get();
+
+    const auctions = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
+        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+      } as Auction;
+    });
+
+    return pickPrimaryAuction(auctions);
+  } catch (error) {
+    console.error(`Error fetching auction for artwork ${artworkId} server-side:`, error);
+    return null;
   }
 }

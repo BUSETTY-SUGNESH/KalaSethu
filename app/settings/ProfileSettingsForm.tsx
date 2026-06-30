@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Button from "@/app/components/ui/Button";
 import Icon from "@/app/components/ui/Icon";
-import { updateUserProfile as updateFirebaseProfile, changePassword } from "@/lib/firebase/auth";
+import Modal from "@/app/components/ui/Modal";
+import { updateUserProfile as updateFirebaseProfile, changePassword, hasPasswordProvider } from "@/lib/firebase/auth";
 import { uploadAvatar, validateImageFile } from "@/lib/firebase/storage";
 import {
   updateUserProfile as saveUserProfile,
@@ -16,23 +18,113 @@ import {
 } from "@/lib/services/user-service";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useUIStore } from "@/lib/stores/ui-store";
-import type { UserAddress } from "@/app/types";
+import type { User, UserAddress } from "@/app/types";
 
 type ActiveTab = "profile" | "addresses" | "security";
 
+type PreferencesState = {
+  notifications: {
+    email: boolean;
+    sms: boolean;
+    marketing: boolean;
+  };
+  privacy: {
+    showPortfolio: boolean;
+    showEmail: boolean;
+    showActivity: boolean;
+  };
+};
+
+const DEFAULT_PREFERENCES: PreferencesState = {
+  notifications: {
+    email: true,
+    sms: false,
+    marketing: false,
+  },
+  privacy: {
+    showPortfolio: true,
+    showEmail: false,
+    showActivity: true,
+  },
+};
+
+const EMPTY_ADDRESS_FORM = {
+  fullName: "",
+  phone: "",
+  addressLine1: "",
+  addressLine2: "",
+  city: "",
+  state: "",
+  pincode: "",
+  country: "India",
+  isDefault: false,
+};
+
+const TAB_BAR_STYLE = {
+  marginBottom: 32,
+  borderBottomWidth: 1,
+  borderBottomStyle: "solid" as const,
+  borderBottomColor: "rgba(196, 199, 199, 0.2)",
+};
+
+function getTabButtonStyle(isActive: boolean): React.CSSProperties {
+  return {
+    padding: "12px 24px",
+    borderTopWidth: 0,
+    borderRightWidth: 0,
+    borderLeftWidth: 0,
+    borderBottomWidth: 3,
+    borderTopStyle: "solid",
+    borderRightStyle: "solid",
+    borderLeftStyle: "solid",
+    borderBottomStyle: "solid",
+    borderTopColor: "transparent",
+    borderRightColor: "transparent",
+    borderLeftColor: "transparent",
+    borderBottomColor: isActive ? "var(--color-primary)" : "transparent",
+    background: "none",
+    cursor: "pointer",
+    fontWeight: 600,
+    marginBottom: -2,
+  };
+}
+
+function buildPreferencesFromUser(user: User): PreferencesState {
+  const stored = (user as User & { preferences?: Partial<PreferencesState> }).preferences;
+  return {
+    notifications: {
+      ...DEFAULT_PREFERENCES.notifications,
+      ...stored?.notifications,
+    },
+    privacy: {
+      ...DEFAULT_PREFERENCES.privacy,
+      ...stored?.privacy,
+    },
+  };
+}
+
+function arePreferencesEqual(a: PreferencesState, b: PreferencesState): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export default function ProfileSettingsForm() {
+  const router = useRouter();
   const { user, setUser } = useAuthStore();
   const { addToast } = useUIStore();
+
+  const hydratedUserIdRef = useRef<string | null>(null);
+  const avatarBlobUrlRef = useRef<string | null>(null);
   
   const [activeTab, setActiveTab] = useState<ActiveTab>("profile");
   const [isSaving, setIsSaving] = useState(false);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
 
   // Tab 1: Profile State
   const [profileData, setProfileData] = useState({
     displayName: "",
     bio: "",
     location: "",
-    website: "",
     specialty: "",
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -43,70 +135,55 @@ export default function ProfileSettingsForm() {
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
   const [isEditingAddress, setIsEditingAddress] = useState(false);
   const [addressFormId, setAddressFormId] = useState<string | null>(null);
-  const [addressForm, setAddressForm] = useState({
-    fullName: "",
-    phone: "",
-    addressLine1: "",
-    addressLine2: "",
-    city: "",
-    state: "",
-    pincode: "",
-    country: "India",
-    isDefault: false
-  });
+  const [addressForm, setAddressForm] = useState({ ...EMPTY_ADDRESS_FORM });
 
   // Tab 3: Security & Preferences State
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [preferences, setPreferences] = useState({
-    notifications: {
-      email: true,
-      sms: false,
-      marketing: false
-    },
-    privacy: {
-      showPortfolio: true,
-      showEmail: false,
-      showActivity: true
+  const [canChangePassword, setCanChangePassword] = useState(false);
+  const [preferences, setPreferences] = useState<PreferencesState>(DEFAULT_PREFERENCES);
+
+  const hydrateFromUser = useCallback((sourceUser: User) => {
+    if (avatarBlobUrlRef.current) {
+      URL.revokeObjectURL(avatarBlobUrlRef.current);
+      avatarBlobUrlRef.current = null;
     }
-  });
+
+    setProfileData({
+      displayName: sourceUser.displayName || "",
+      bio: sourceUser.bio || "",
+      location: sourceUser.location || "",
+      specialty: sourceUser.specialty || "",
+    });
+    setAvatarPreview(sourceUser.avatarUrl || "");
+    setAvatarFile(null);
+    setPreferences(buildPreferencesFromUser(sourceUser));
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setIsEditingAddress(false);
+    setAddressFormId(null);
+    setAddressForm({ ...EMPTY_ADDRESS_FORM });
+  }, []);
 
   useEffect(() => {
-    if (!user) return;
-    setProfileData({
-      displayName: user.displayName || "",
-      bio: user.bio || "",
-      location: user.location || "",
-      website: user.website || "",
-      specialty: user.specialty || "",
-    });
-    setAvatarPreview(user.avatarUrl || "");
-    
-    // Load preferences from user doc if exists
-    if ((user as any).preferences) {
-      setPreferences({
-        notifications: {
-          email: true,
-          sms: false,
-          marketing: false,
-          ...(user as any).preferences.notifications
-        },
-        privacy: {
-          showPortfolio: true,
-          showEmail: false,
-          showActivity: true,
-          ...(user as any).preferences.privacy
-        }
-      });
+    setCanChangePassword(hasPasswordProvider());
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      hydratedUserIdRef.current = null;
+      return;
     }
 
-    if (activeTab === "addresses") {
-      loadAddresses();
-    }
-  }, [user, activeTab]);
+    if (hydratedUserIdRef.current === user.id) return;
+    hydratedUserIdRef.current = user.id;
+    hydrateFromUser(user);
+  }, [user, hydrateFromUser]);
 
   // --- Load Addresses ---
-  async function loadAddresses() {
+  const loadAddresses = useCallback(async () => {
     if (!user) return;
     setIsLoadingAddresses(true);
     try {
@@ -118,7 +195,20 @@ export default function ProfileSettingsForm() {
     } finally {
       setIsLoadingAddresses(false);
     }
-  }
+  }, [user, addToast]);
+
+  useEffect(() => {
+    if (!user || activeTab !== "addresses") return;
+    void loadAddresses();
+  }, [user, activeTab, loadAddresses]);
+
+  useEffect(() => {
+    return () => {
+      if (avatarBlobUrlRef.current) {
+        URL.revokeObjectURL(avatarBlobUrlRef.current);
+      }
+    };
+  }, []);
 
   // --- Profile Avatar Selection ---
   function handleAvatarChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -132,7 +222,12 @@ export default function ProfileSettingsForm() {
     }
 
     setAvatarFile(file);
-    setAvatarPreview(URL.createObjectURL(file));
+    if (avatarBlobUrlRef.current) {
+      URL.revokeObjectURL(avatarBlobUrlRef.current);
+    }
+    const blobUrl = URL.createObjectURL(file);
+    avatarBlobUrlRef.current = blobUrl;
+    setAvatarPreview(blobUrl);
   }
 
   // --- Save Profile ---
@@ -152,7 +247,6 @@ export default function ProfileSettingsForm() {
         displayName: profileData.displayName.trim(),
         bio: profileData.bio.trim(),
         location: profileData.location.trim(),
-        website: profileData.website.trim(),
         specialty: profileData.specialty.trim(),
         avatarUrl,
       };
@@ -165,6 +259,11 @@ export default function ProfileSettingsForm() {
 
       setUser({ ...user, ...updates });
       setAvatarFile(null);
+      if (avatarBlobUrlRef.current) {
+        URL.revokeObjectURL(avatarBlobUrlRef.current);
+        avatarBlobUrlRef.current = null;
+      }
+      setAvatarPreview(avatarUrl || "");
       addToast({
         type: "success",
         title: "Profile Updated",
@@ -267,18 +366,108 @@ export default function ProfileSettingsForm() {
   function resetAddressForm() {
     setIsEditingAddress(false);
     setAddressFormId(null);
-    setAddressForm({
-      fullName: "",
-      phone: "",
-      addressLine1: "",
-      addressLine2: "",
-      city: "",
-      state: "",
-      pincode: "",
-      country: "India",
-      isDefault: false
+    setAddressForm({ ...EMPTY_ADDRESS_FORM });
+  }
+
+  const savedPreferences = useMemo(
+    () => (user ? buildPreferencesFromUser(user) : DEFAULT_PREFERENCES),
+    [user]
+  );
+
+  const isProfileDirty = useMemo(() => {
+    if (!user) return false;
+    if (avatarFile) return true;
+    return (
+      profileData.displayName !== (user.displayName || "") ||
+      profileData.bio !== (user.bio || "") ||
+      profileData.location !== (user.location || "") ||
+      profileData.specialty !== (user.specialty || "")
+    );
+  }, [user, profileData, avatarFile]);
+
+  const isSecurityDirty = useMemo(() => {
+    if (!user) return false;
+    if (currentPassword || newPassword || confirmPassword) return true;
+    return !arePreferencesEqual(preferences, savedPreferences);
+  }, [user, currentPassword, newPassword, confirmPassword, preferences, savedPreferences]);
+
+  const isAddressFormDirty = useMemo(() => {
+    if (!isEditingAddress) return false;
+    if (!addressFormId) {
+      return Boolean(
+        addressForm.fullName.trim() ||
+        addressForm.phone.trim() ||
+        addressForm.addressLine1.trim() ||
+        addressForm.addressLine2.trim() ||
+        addressForm.city.trim() ||
+        addressForm.state.trim() ||
+        addressForm.pincode.trim() ||
+        addressForm.isDefault
+      );
+    }
+    const original = addresses.find((addr) => addr.id === addressFormId);
+    if (!original) return true;
+    return (
+      addressForm.fullName !== original.fullName ||
+      addressForm.phone !== original.phone ||
+      addressForm.addressLine1 !== original.addressLine1 ||
+      (addressForm.addressLine2 || "") !== (original.addressLine2 || "") ||
+      addressForm.city !== original.city ||
+      addressForm.state !== original.state ||
+      addressForm.pincode !== original.pincode ||
+      addressForm.country !== original.country ||
+      addressForm.isDefault !== original.isDefault
+    );
+  }, [isEditingAddress, addressFormId, addressForm, addresses]);
+
+  const hasUnsavedChanges = isProfileDirty || isSecurityDirty || isAddressFormDirty;
+
+  const requestNavigation = useCallback((action: () => void) => {
+    if (hasUnsavedChanges) {
+      setPendingNavigation(() => action);
+      setShowLeaveDialog(true);
+      return;
+    }
+    action();
+  }, [hasUnsavedChanges]);
+
+  function handleBack() {
+    requestNavigation(() => {
+      if (typeof window !== "undefined" && window.history.length > 1) {
+        router.back();
+        return;
+      }
+      if (user) {
+        router.push(`/profile/${user.id}`);
+        return;
+      }
+      router.push("/dashboard");
     });
   }
+
+  function handleDiscardChanges() {
+    if (!user) return;
+    hydrateFromUser(user);
+    setShowLeaveDialog(false);
+    setPendingNavigation(null);
+  }
+
+  function handleConfirmLeave() {
+    const action = pendingNavigation;
+    setShowLeaveDialog(false);
+    setPendingNavigation(null);
+    action?.();
+  }
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsavedChanges]);
 
   // --- Save Security Settings / Preferences ---
   async function handlePreferencesSave(e: React.FormEvent) {
@@ -289,12 +478,23 @@ export default function ProfileSettingsForm() {
     try {
       // 1. Password updates
       if (newPassword) {
+        if (!canChangePassword) {
+          addToast({ type: "error", title: "Not Available", message: "Password is managed by your sign-in provider." });
+          setIsSaving(false);
+          return;
+        }
+        if (!currentPassword) {
+          addToast({ type: "error", title: "Required", message: "Enter your current password to continue." });
+          setIsSaving(false);
+          return;
+        }
         if (newPassword !== confirmPassword) {
           addToast({ type: "error", title: "Match Error", message: "Passwords do not match." });
           setIsSaving(false);
           return;
         }
-        await changePassword(newPassword);
+        await changePassword(newPassword, currentPassword);
+        setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
         addToast({ type: "success", title: "Security Saved", message: "Password updated successfully." });
@@ -309,13 +509,28 @@ export default function ProfileSettingsForm() {
         title: "Preferences Saved",
         message: "Your privacy and notification preferences have been saved.",
       });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Failed to save preferences", error);
-      addToast({
-        type: "error",
-        title: "Save Failed",
-        message: "Failed to update settings preferences.",
-      });
+      const code = (error as { code?: string })?.code;
+      if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
+        addToast({
+          type: "error",
+          title: "Incorrect Password",
+          message: "Your current password is incorrect.",
+        });
+      } else if (code === "auth/requires-recent-login") {
+        addToast({
+          type: "error",
+          title: "Re-authentication Required",
+          message: "Please sign out and sign in again, then retry changing your password.",
+        });
+      } else {
+        addToast({
+          type: "error",
+          title: "Save Failed",
+          message: "Failed to update settings preferences.",
+        });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -338,6 +553,17 @@ export default function ProfileSettingsForm() {
 
   return (
     <div className="container section-gap" style={{ maxWidth: 1024, margin: "0 auto" }}>
+      <div style={{ marginBottom: 24 }}>
+        <Button
+          variant="ghost"
+          icon="arrow_back"
+          iconPosition="left"
+          onClick={handleBack}
+        >
+          Back
+        </Button>
+      </div>
+
       <div className="flex justify-between items-start" style={{ marginBottom: 40 }}>
         <div>
           <h1 className="text-display-sm text-primary">Settings</h1>
@@ -345,57 +571,39 @@ export default function ProfileSettingsForm() {
             Manage your public profile, shipping addresses, security, and notification preferences.
           </p>
         </div>
-        <Link href={`/profile/${user.id}`}>
-          <Button variant="outline" icon="visibility" iconPosition="left">
-            View Profile
-          </Button>
-        </Link>
+        <Button
+          variant="outline"
+          icon="visibility"
+          iconPosition="left"
+          onClick={() => requestNavigation(() => router.push(`/profile/${user.id}`))}
+        >
+          View Profile
+        </Button>
       </div>
 
       {/* Tabs Header */}
-      <div className="flex gap-16 border-b border-outline-variant" style={{ borderBottom: "1px solid rgba(196, 199, 199, 0.2)", marginBottom: 32 }}>
+      <div className="flex gap-16" style={TAB_BAR_STYLE}>
         <button
+          type="button"
           onClick={() => setActiveTab("profile")}
           className={`text-label-md ${activeTab === "profile" ? "text-primary" : "text-on-surface-variant"}`}
-          style={{
-            padding: "12px 24px",
-            borderBottom: activeTab === "profile" ? "3px solid var(--color-primary)" : "3px solid transparent",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            fontWeight: 600,
-            marginBottom: -2
-          }}
+          style={getTabButtonStyle(activeTab === "profile")}
         >
           Profile Details
         </button>
         <button
+          type="button"
           onClick={() => setActiveTab("addresses")}
           className={`text-label-md ${activeTab === "addresses" ? "text-primary" : "text-on-surface-variant"}`}
-          style={{
-            padding: "12px 24px",
-            borderBottom: activeTab === "addresses" ? "3px solid var(--color-primary)" : "3px solid transparent",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            fontWeight: 600,
-            marginBottom: -2
-          }}
+          style={getTabButtonStyle(activeTab === "addresses")}
         >
           Shipping Addresses
         </button>
         <button
+          type="button"
           onClick={() => setActiveTab("security")}
           className={`text-label-md ${activeTab === "security" ? "text-primary" : "text-on-surface-variant"}`}
-          style={{
-            padding: "12px 24px",
-            borderBottom: activeTab === "security" ? "3px solid var(--color-primary)" : "3px solid transparent",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            fontWeight: 600,
-            marginBottom: -2
-          }}
+          style={getTabButtonStyle(activeTab === "security")}
         >
           Security & Privacy
         </button>
@@ -453,27 +661,15 @@ export default function ProfileSettingsForm() {
               />
             </div>
 
-            <div className="grid-2">
-              <div className="form-group">
-                <label className="form-label">Location</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={profileData.location}
-                  onChange={(event) => setProfileData({ ...profileData, location: event.target.value })}
-                  placeholder="City, State"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Website</label>
-                <input
-                  type="url"
-                  className="form-input"
-                  value={profileData.website}
-                  onChange={(event) => setProfileData({ ...profileData, website: event.target.value })}
-                  placeholder="https://example.com"
-                />
-              </div>
+            <div className="form-group">
+              <label className="form-label">Location</label>
+              <input
+                type="text"
+                className="form-input"
+                value={profileData.location}
+                onChange={(event) => setProfileData({ ...profileData, location: event.target.value })}
+                placeholder="City, State"
+              />
             </div>
 
             {(user.role === "artist" || user.role === "verified_artist" || user.role === "admin") && (
@@ -489,7 +685,14 @@ export default function ProfileSettingsForm() {
               </div>
             )}
 
-            <div style={{ paddingTop: 24, borderTop: "1px solid rgba(196, 199, 199, 0.2)" }}>
+            <div
+              style={{
+                paddingTop: 24,
+                borderTopWidth: 1,
+                borderTopStyle: "solid",
+                borderTopColor: "rgba(196, 199, 199, 0.2)",
+              }}
+            >
               <Button variant="primary" type="submit" disabled={isSaving}>
                 {isSaving ? "Saving..." : "Save Profile"}
               </Button>
@@ -615,7 +818,14 @@ export default function ProfileSettingsForm() {
                   </label>
                 </div>
 
-                <div className="flex gap-16 justify-end pt-16" style={{ borderTop: "1px solid rgba(196, 199, 199, 0.2)" }}>
+                <div
+                  className="flex gap-16 justify-end pt-16"
+                  style={{
+                    borderTopWidth: 1,
+                    borderTopStyle: "solid",
+                    borderTopColor: "rgba(196, 199, 199, 0.2)",
+                  }}
+                >
                   <Button type="button" variant="ghost" onClick={resetAddressForm}>
                     Cancel
                   </Button>
@@ -674,7 +884,14 @@ export default function ProfileSettingsForm() {
                     Phone: {addr.phone}
                   </p>
 
-                  <div className="flex gap-16 border-t border-outline-variant pt-16" style={{ borderTop: "1px solid rgba(196, 199, 199, 0.2)" }}>
+                  <div
+                    className="flex gap-16 pt-16"
+                    style={{
+                      borderTopWidth: 1,
+                      borderTopStyle: "solid",
+                      borderTopColor: "rgba(196, 199, 199, 0.2)",
+                    }}
+                  >
                     <button
                       onClick={() => startEditAddress(addr)}
                       style={{ border: "none", background: "none", color: "var(--color-primary)", cursor: "pointer", fontWeight: 600 }}
@@ -721,33 +938,67 @@ export default function ProfileSettingsForm() {
             {/* Change Password */}
             <div>
               <h3 className="text-headline-sm text-primary" style={{ marginBottom: 16 }}>Change Password</h3>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">New Password</label>
-                  <input
-                    type="password"
-                    className="form-input"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Minimum 8 characters"
-                    minLength={8}
-                  />
+              {canChangePassword ? (
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label">Current Password</label>
+                    <input
+                      type="password"
+                      className="form-input"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Enter current password"
+                      autoComplete="current-password"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">New Password</label>
+                    <input
+                      type="password"
+                      className="form-input"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Minimum 8 characters"
+                      minLength={8}
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Confirm New Password</label>
+                    <input
+                      type="password"
+                      className="form-input"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Repeat new password"
+                      minLength={8}
+                      autoComplete="new-password"
+                    />
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Confirm New Password</label>
-                  <input
-                    type="password"
-                    className="form-input"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Repeat new password"
-                    minLength={8}
-                  />
-                </div>
-              </div>
+              ) : (
+                <p className="text-body-md text-on-surface-variant">
+                  Password is managed by your Google account. Use Google account settings to change it.
+                </p>
+              )}
             </div>
 
-            <hr style={{ border: "none", borderTop: "1px solid rgba(196, 199, 199, 0.2)" }} />
+            <hr
+              style={{
+                borderTopWidth: 1,
+                borderTopStyle: "solid",
+                borderTopColor: "rgba(196, 199, 199, 0.2)",
+                borderRightWidth: 0,
+                borderBottomWidth: 0,
+                borderLeftWidth: 0,
+                borderRightStyle: "solid",
+                borderBottomStyle: "solid",
+                borderLeftStyle: "solid",
+                borderRightColor: "transparent",
+                borderBottomColor: "transparent",
+                borderLeftColor: "transparent",
+              }}
+            />
 
             {/* Notification Preferences */}
             <div>
@@ -789,7 +1040,22 @@ export default function ProfileSettingsForm() {
               </div>
             </div>
 
-            <hr style={{ border: "none", borderTop: "1px solid rgba(196, 199, 199, 0.2)" }} />
+            <hr
+              style={{
+                borderTopWidth: 1,
+                borderTopStyle: "solid",
+                borderTopColor: "rgba(196, 199, 199, 0.2)",
+                borderRightWidth: 0,
+                borderBottomWidth: 0,
+                borderLeftWidth: 0,
+                borderRightStyle: "solid",
+                borderBottomStyle: "solid",
+                borderLeftStyle: "solid",
+                borderRightColor: "transparent",
+                borderBottomColor: "transparent",
+                borderLeftColor: "transparent",
+              }}
+            />
 
             {/* Privacy Settings */}
             <div>
@@ -831,7 +1097,14 @@ export default function ProfileSettingsForm() {
               </div>
             </div>
 
-            <div style={{ paddingTop: 24, borderTop: "1px solid rgba(196, 199, 199, 0.2)" }}>
+            <div
+              style={{
+                paddingTop: 24,
+                borderTopWidth: 1,
+                borderTopStyle: "solid",
+                borderTopColor: "rgba(196, 199, 199, 0.2)",
+              }}
+            >
               <Button variant="primary" type="submit" disabled={isSaving}>
                 {isSaving ? "Saving Settings..." : "Save Settings & Security"}
               </Button>
@@ -839,6 +1112,36 @@ export default function ProfileSettingsForm() {
           </form>
         </div>
       )}
+
+      <Modal
+        open={showLeaveDialog}
+        onClose={() => {
+          setShowLeaveDialog(false);
+          setPendingNavigation(null);
+        }}
+        title="Unsaved changes"
+        size="md"
+        footer={
+          <div className="flex gap-16 justify-end">
+            <Button variant="ghost" onClick={() => {
+              setShowLeaveDialog(false);
+              setPendingNavigation(null);
+            }}>
+              Stay on page
+            </Button>
+            <Button variant="outline" onClick={handleDiscardChanges}>
+              Discard changes
+            </Button>
+            <Button variant="primary" onClick={handleConfirmLeave}>
+              Leave without saving
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-body-md text-on-surface-variant">
+          You have unsaved changes on this page. Leave without saving, or stay to keep editing.
+        </p>
+      </Modal>
     </div>
   );
 }

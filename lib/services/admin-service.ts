@@ -13,6 +13,7 @@ import type {
   AdminLog,
   PaginatedResult,
   PlatformAnalytics,
+  PlatformStats,
   FeatureFlag,
 } from '@/app/types';
 import type { DocumentSnapshot } from '@/lib/firebase/firestore';
@@ -160,7 +161,7 @@ export async function getLatestAnalytics(): Promise<PlatformAnalytics | null> {
   return adminRepository.getLatestAnalytics('monthly');
 }
 
-export async function getPlatformStats(): Promise<any | null> {
+export async function getPlatformStats(): Promise<PlatformStats | null> {
   return adminRepository.getPlatformStats();
 }
 

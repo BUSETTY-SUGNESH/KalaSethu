@@ -40,6 +40,7 @@ const config_1 = require("./config");
 const app_check_1 = require("./utils/app-check");
 const rate_limit_1 = require("./utils/rate-limit");
 const schema_validation_1 = require("./utils/schema-validation");
+const feature_flags_1 = require("./utils/feature-flags");
 const community_provisioning_1 = require("./community-provisioning");
 const regions_1 = require("./constants/regions");
 // Aggregation for comments count on posts
@@ -156,6 +157,8 @@ exports.followUser = functions.region('asia-south1').https.onCall(async (data, c
     }
     (0, app_check_1.assertAppCheck)(context);
     await (0, rate_limit_1.assertRateLimit)(context.auth.uid, 'followUser');
+    await (0, feature_flags_1.assertNotInMaintenance)(context.auth.uid);
+    await (0, feature_flags_1.assertFeatureEnabled)('enable_social_feed', 'The social feed is currently disabled.');
     const followerId = context.auth.uid;
     const followerName = typeof data.followerName === 'string' ? data.followerName : 'User';
     (0, schema_validation_1.validateFollowPayload)({

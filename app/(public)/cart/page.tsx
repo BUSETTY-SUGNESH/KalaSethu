@@ -1,11 +1,13 @@
 'use client';
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
 import { useCartStore } from "@/lib/stores/cart-store";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { ARTWORK_PLACEHOLDER } from "@/lib/constants/placeholders";
 
 export default function CartPage() {
   const router = useRouter();
@@ -51,8 +53,14 @@ export default function CartPage() {
           <ul className="flex flex-col gap-24">
             {items.map((item) => (
               <li key={item.artworkId} className="flex gap-24 items-start border-b border-outline-variant pb-24">
-                <div style={{ width: 120, height: 120, borderRadius: "var(--radius-md)", overflow: "hidden", flexShrink: 0 }}>
-                  <img src={item.artworkImageUrl || "https://placehold.co/200x200"} alt={item.artworkTitle} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <div style={{ width: 120, height: 120, borderRadius: "var(--radius-md)", overflow: "hidden", flexShrink: 0, position: "relative" }}>
+                  <Image
+                    src={item.artworkImageUrl || ARTWORK_PLACEHOLDER}
+                    alt={item.artworkTitle}
+                    fill
+                    sizes="120px"
+                    style={{ objectFit: "cover" }}
+                  />
                 </div>
                 <div className="flex flex-col grow">
                   <div className="flex justify-between items-start">

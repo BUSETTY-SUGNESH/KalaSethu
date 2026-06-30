@@ -375,8 +375,21 @@ KalaSetu Firestore
 | `shareCount` | `number` | Default: `0` |
 | `viewCount` | `number` | Default: `0` |
 | `isTrending` | `boolean` | Set by Cloud Function |
+| `isPinned` | `boolean` | Optional; seller-pinned on Latest feed |
+| `pinnedAt` | `ISO string` | Optional |
+| `pinnedBy` | `string` | Optional; FK → `users` |
+| `authorRole` | `UserRole` | Optional; denormalized seller/buyer badge |
 | `createdAt` | `ISO string` | |
 | `updatedAt` | `ISO string` | |
+
+**Composite indexes** (`firestore.indexes.json`):
+
+| Query | Index fields |
+|---|---|
+| Latest feed, top contributors | `createdAt` DESC (single-field, automatic) |
+| Trending tab / home widget | `isTrending` ASC + `likeCount` DESC |
+| My Posts / pin modal | `authorId` ASC + `createdAt` DESC |
+| Techniques / Provenance tabs | `category` ASC + `createdAt` DESC |
 
 ---
 

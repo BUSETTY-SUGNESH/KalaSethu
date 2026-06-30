@@ -3,6 +3,34 @@ import type { Artwork, MarketplaceCategorySummary } from '@/app/types';
 import type { ArtworkPaginationCursor } from '@/lib/firebase/firestore';
 import { ARTWORK_CATEGORIES, CATEGORY_PLACEHOLDER_IMAGE } from '@/lib/constants/artwork-categories';
 
+export function isValidArtworkId(id: unknown): id is string {
+  return typeof id === 'string' && id.trim().length > 0 && !id.includes('/');
+}
+
+function mapArtworkDoc(doc: FirebaseFirestore.DocumentSnapshot): Artwork {
+  const docData = doc.data()!;
+  return {
+    id: doc.id,
+    ...docData,
+    createdAt: docData.createdAt?.toDate ? docData.createdAt.toDate().toISOString() : docData.createdAt,
+    updatedAt: docData.updatedAt?.toDate ? docData.updatedAt.toDate().toISOString() : docData.updatedAt,
+    publishedAt: docData.publishedAt?.toDate ? docData.publishedAt.toDate().toISOString() : docData.publishedAt,
+  } as Artwork;
+}
+
+export async function getArtworkServer(artworkId: string): Promise<Artwork | null> {
+  if (!isValidArtworkId(artworkId)) return null;
+
+  try {
+    const doc = await adminDb.collection('artworks').doc(artworkId).get();
+    if (!doc.exists) return null;
+    return mapArtworkDoc(doc);
+  } catch (error) {
+    console.error(`Error fetching artwork ${artworkId} server-side:`, error);
+    return null;
+  }
+}
+
 /**
  * Server-only service for fetching artworks using firebase-admin.
  * Do not import this in Client Components.

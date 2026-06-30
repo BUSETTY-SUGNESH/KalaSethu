@@ -1,40 +1,84 @@
 # CharchaSabha / Community Page — Issue Report
 
 > **Files:** [`app/(public)/community/page.tsx`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/community/page.tsx)
-> **Services:** `community-service.ts`
+> **Services:** [`community-service.ts`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/lib/services/community-service.ts)
+> **Repository:** [`community.repository.ts`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/lib/repositories/firestore/community.repository.ts)
+> **Component:** [`RoleBadge.tsx`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/components/community/RoleBadge.tsx)
+> **Indexes:** [`firestore.indexes.json`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/firestore.indexes.json)
 
 ---
 
 ## Summary
-The Community page (CharchaSabha) fetches posts from Firestore and renders them correctly. However, all mutation flows (create post, filter tabs, seller tools) are non-functional stubs.
+
+The Community page (CharchaSabha) fetches posts from Firestore and renders them correctly. All mutation flows (create post, filter tabs, seller tools), dynamic sidebar data, role-badge semantics, and required Firestore composite indexes are in place. Discord-style artist communities and direct messaging were not modified.
 
 ---
 
 ## Issues
 
-### 🟡 M-08 — "Post Discussion" Button Has No Submit Handler `[NEW]`
-**File:** [`community/page.tsx:L151`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/community/page.tsx#L151)
-**Description:** The "Post Discussion" button in the inline form has no `onClick` handler. The form captures `newPostTitle` and `newPostContent` in React state, but never submits them to any service.
-**Impact:** Users cannot create new discussions.
+### ✅ M-08 — "Post Discussion" Button Has No Submit Handler `[RESOLVED]`
+**File:** `app/(public)/community/page.tsx`
+**Resolution:** `handlePostDiscussion` calls `createPost()` with validation (title ≥6, content ≥20), auth guard, loading state, success/error toasts, and redirect to `/community/[id]`. Button is disabled while submitting or when fields are invalid.
 
-### 🟡 M-09 — Filter Tabs Are Non-Functional `[NEW]`
-**File:** [`community/page.tsx:L165-173`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/community/page.tsx#L165-L173)
-**Description:** The "Latest", "Trending", "Techniques", "Provenance", and "My Posts" filter tabs are `<button>` elements with no `onClick` handlers. The first tab appears selected via static CSS but clicking any tab does nothing. The feed always shows the default query result.
-**Impact:** Users cannot filter community content.
+### ✅ M-09 — Filter Tabs Are Non-Functional `[RESOLVED]`
+**File:** `app/(public)/community/page.tsx`, `lib/services/community-service.ts`, `lib/repositories/firestore/community.repository.ts`
+**Resolution:** `activeFilter` state drives tab clicks with dynamic active styling. Each tab loads distinct data:
+- **Latest** → `getFeedPosts(20)` with pinned posts sorted first
+- **Trending** → `getTrendingPosts(20)`
+- **Techniques** / **Provenance** → `getPostsByCategory()`
+- **My Posts** → `getUserPosts(user.id)` with login redirect if unauthenticated
 
-### 🟡 M-18 — Seller "Pin a Discussion" and "Announce Event" Have No Handlers `[NEW]`
-**File:** [`community/page.tsx:L264-271`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/community/page.tsx#L264-L271)
-**Description:** The seller tools sidebar shows "Pin a Discussion" and "Announce Event" buttons, neither of which has an `onClick` handler.
-**Impact:** Seller-specific community tools are non-functional.
+### ✅ M-18 — Seller "Pin a Discussion" and "Announce Event" Have No Handlers `[RESOLVED]`
+**File:** `app/(public)/community/page.tsx`, `app/(public)/events/page.tsx`
+**Resolution:**
+- **Pin a Discussion** opens a modal listing the seller's posts via `getUserPosts()`. Each row has Pin/Unpin toggles calling `pinPost()` / `unpinPost()`. Pinned posts appear at the top of the Latest feed.
+- **Announce Event** navigates to `/events?create=1`. Events page reads the `create` search param and auto-opens the seller create form.
 
-### 🔵 — Top Contributors Are Hardcoded `[NEW]`
-**File:** [`community/page.tsx:L238-255`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/community/page.tsx#L238-L255)
-**Description:** The "Top Contributors" sidebar section shows hardcoded users (Prof. K. Iyer, Arun Sharma) with static images.
+Post type extended with `isPinned`, `pinnedAt`, `pinnedBy` fields.
 
-### 🔵 — `RoleBadge` Component Has Fragile Color Logic `[NEW]`
-**File:** [`community/page.tsx:L14-44`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/community/page.tsx#L14-L44)
-**Description:** The `RoleBadge` component uses CSS `rgba()` with custom property RGB fallbacks (`var(--color-accent-gold-rgb, 201,160,80)`) which may not be defined in the design tokens, causing incorrect colors.
+### ✅ — Top Contributors Are Hardcoded `[RESOLVED]`
+**File:** `app/(public)/community/page.tsx`, `lib/services/community-service.ts`
+**Resolution:** `getTopContributors(5)` aggregates engagement from the 100 most recent posts (score = posts×2 + comments + likes), enriches with user profiles for specialty/avatar, and renders a dynamic sidebar with profile links, avatar fallbacks, verified icons, and empty/loading states. No hardcoded external image URLs.
 
-### 🔵 — `authorVerified` Used for Role Badge but Not Part of Post Type `[NEW]`
-**File:** [`community/page.tsx:L199`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/community/page.tsx#L199)
-**Description:** The post rendering uses `post.authorVerified` to determine the role badge, but the `Post` type may not include this field, or it may always be `false` for non-verified artists.
+### ✅ — `RoleBadge` Component Has Fragile Color Logic `[RESOLVED]`
+**File:** `app/components/community/RoleBadge.tsx`, `app/globals.css`
+**Resolution:** Extracted `RoleBadge` to a shared component using design-system CSS classes (`.role-badge--seller`, `.role-badge--buyer`) with `color-mix()` on existing hex tokens. Removed fragile `rgba(var(--color-*-rgb, …))` inline styles.
+
+### ✅ — `authorVerified` Used for Role Badge but Not Part of Post Type `[RESOLVED]`
+**File:** `app/types/index.ts`, `lib/services/community-service.ts`, `app/(public)/community/page.tsx`
+**Resolution:** `authorVerified` was already on `Post`; the bug was using it as a seller/buyer proxy. Added `authorRole?: UserRole` to `Post`, set in `createPost()` from the caller's role. Feed badges use `resolvePostRole(post)` with fallback chain: `authorRole` → `verified_artist` if `authorVerified` → `user`. Dashboard create flow also passes `authorRole`.
+
+### ✅ — Firestore Composite Indexes for CharchaSabha Queries `[VERIFIED]`
+**Files:** `firestore.indexes.json`, `lib/repositories/firestore/community.repository.ts`, `docs/database/firestore-schema.md`
+**Verification:** All CharchaSabha post queries map to deployed indexes on project `kala-sethu` (confirmed via `firebase firestore:indexes` and `firebase deploy --only firestore:indexes`).
+
+| Repository method | Firestore query | Index |
+|---|---|---|
+| `getFeed`, `getRecentPosts` | `orderBy('createdAt', 'desc')` | Single-field (automatic) |
+| `getTrending` | `where('isTrending','==',true).orderBy('likeCount','desc')` | `isTrending` ASC + `likeCount` DESC |
+| `getByAuthor` | `where('authorId','==',uid).orderBy('createdAt','desc')` | `authorId` ASC + `createdAt` DESC |
+| `getByCategory` | `where('category','==',cat).orderBy('createdAt','desc')` | `category` ASC + `createdAt` DESC |
+
+No duplicate `posts` indexes in `firestore.indexes.json`. Pinned-post sorting is client-side on the Latest feed (no extra index required).
+
+**Note:** Techniques/Provenance tabs may appear empty for legacy posts that lack a `category` field. New discussions created via `/dashboard/community/new` or the inline form set `category` correctly.
+
+---
+
+## Verification Checklist
+
+- [x] Inline "Post Discussion" creates a discussion and navigates to detail page
+- [x] Latest, Trending, Techniques, Provenance, and My Posts tabs load distinct feeds
+- [x] Active filter tab styling updates on click
+- [x] Seller can pin/unpin own discussions via modal; pinned posts appear first on Latest
+- [x] "Announce Event" opens events create form via `/events?create=1`
+- [x] Top Contributors sidebar shows real users from post activity (or empty state)
+- [x] Seller/Buyer badges use `authorRole`, not verification status alone
+- [x] Post detail likes/comments unchanged; messaging/communities architecture untouched
+- [x] Firestore composite indexes for all CharchaSabha post queries deployed (`category` + `createdAt` included)
+
+---
+
+## Remaining / Out of Scope
+
+No open issues remain in this audit. Event creation form on `/events` is a separate Kalent Hub scope (stub submit handler not part of CharchaSabha audit).

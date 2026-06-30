@@ -4,6 +4,7 @@ import { db } from './config';
 import { assertAppCheck } from './utils/app-check';
 import { assertRateLimit } from './utils/rate-limit';
 import { validateFollowPayload } from './utils/schema-validation';
+import { assertFeatureEnabled, assertNotInMaintenance } from './utils/feature-flags';
 import { joinCommunityMember } from './community-provisioning';
 import { FIRESTORE_TRIGGER_REGION } from './constants/regions';
 
@@ -118,6 +119,8 @@ export const followUser = functions.region('asia-south1').https.onCall(async (da
 
   assertAppCheck(context);
   await assertRateLimit(context.auth.uid, 'followUser');
+  await assertNotInMaintenance(context.auth.uid);
+  await assertFeatureEnabled('enable_social_feed', 'The social feed is currently disabled.');
 
   const followerId = context.auth.uid;
   const followerName = typeof data.followerName === 'string' ? data.followerName : 'User';

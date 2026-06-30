@@ -5,6 +5,7 @@ import { db } from './config';
 import { auctionRepository } from './repositories/auction.repository';
 import { assertAppCheck } from './utils/app-check';
 import { assertRateLimit } from './utils/rate-limit';
+import { assertFeatureEnabled, assertNotInMaintenance } from './utils/feature-flags';
 import { validateBidPayload } from './utils/schema-validation';
 import {
   notifyOutbid,
@@ -38,6 +39,8 @@ export const placeBid = functions.region('asia-south1').https.onCall(async (data
 
   assertAppCheck(context);
   await assertRateLimit(context.auth.uid, 'placeBid');
+  await assertNotInMaintenance(context.auth.uid);
+  await assertFeatureEnabled('enable_auctions', 'Auctions are currently disabled.');
 
   const { auctionId, amount } = data;
 
@@ -500,6 +503,9 @@ export const cancelAuction = functions.region('asia-south1').https.onCall(async 
     throw new functions.https.HttpsError('unauthenticated', 'You must be logged in.');
   }
 
+  await assertNotInMaintenance(context.auth.uid);
+  await assertFeatureEnabled('enable_auctions', 'Auctions are currently disabled.');
+
   const { auctionId } = data;
   if (!auctionId || typeof auctionId !== 'string') {
     throw new functions.https.HttpsError('invalid-argument', 'auctionId is required.');
@@ -547,6 +553,9 @@ export const updateAuction = functions.region('asia-south1').https.onCall(async 
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'You must be logged in.');
   }
+
+  await assertNotInMaintenance(context.auth.uid);
+  await assertFeatureEnabled('enable_auctions', 'Auctions are currently disabled.');
 
   const {
     auctionId,

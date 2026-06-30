@@ -40,6 +40,7 @@ const config_1 = require("./config");
 const auction_repository_1 = require("./repositories/auction.repository");
 const app_check_1 = require("./utils/app-check");
 const rate_limit_1 = require("./utils/rate-limit");
+const feature_flags_1 = require("./utils/feature-flags");
 const schema_validation_1 = require("./utils/schema-validation");
 const notification_helpers_1 = require("./notification-helpers");
 const batch_commit_1 = require("./utils/batch-commit");
@@ -61,6 +62,8 @@ exports.placeBid = functions.region('asia-south1').https.onCall(async (data, con
     }
     (0, app_check_1.assertAppCheck)(context);
     await (0, rate_limit_1.assertRateLimit)(context.auth.uid, 'placeBid');
+    await (0, feature_flags_1.assertNotInMaintenance)(context.auth.uid);
+    await (0, feature_flags_1.assertFeatureEnabled)('enable_auctions', 'Auctions are currently disabled.');
     const { auctionId, amount } = data;
     if (!auctionId || typeof amount !== 'number') {
         throw new functions.https.HttpsError('invalid-argument', 'The function must be called with an auctionId and a valid amount.');
@@ -438,6 +441,8 @@ exports.cancelAuction = functions.region('asia-south1').https.onCall(async (data
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'You must be logged in.');
     }
+    await (0, feature_flags_1.assertNotInMaintenance)(context.auth.uid);
+    await (0, feature_flags_1.assertFeatureEnabled)('enable_auctions', 'Auctions are currently disabled.');
     const { auctionId } = data;
     if (!auctionId || typeof auctionId !== 'string') {
         throw new functions.https.HttpsError('invalid-argument', 'auctionId is required.');
@@ -474,6 +479,8 @@ exports.updateAuction = functions.region('asia-south1').https.onCall(async (data
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'You must be logged in.');
     }
+    await (0, feature_flags_1.assertNotInMaintenance)(context.auth.uid);
+    await (0, feature_flags_1.assertFeatureEnabled)('enable_auctions', 'Auctions are currently disabled.');
     const { auctionId, startPrice, reservePrice, minIncrement, startsAt, endsAt, extensionMinutes, type, } = data;
     if (!auctionId || typeof auctionId !== 'string') {
         throw new functions.https.HttpsError('invalid-argument', 'auctionId is required.');

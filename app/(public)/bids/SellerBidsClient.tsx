@@ -12,6 +12,7 @@ import {
   computeSellerAuctionStats,
 } from "@/lib/services/auction-service";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { ARTWORK_PLACEHOLDER } from "@/lib/constants/placeholders";
 import type { Auction, AuctionStatus } from "@/app/types";
 import { formatDistanceToNow } from "date-fns";
 
@@ -143,9 +144,9 @@ export default function SellerBidsClient() {
             <div className={`status-dot ${statusBadge.dotClass}`} />
             <span className="text-label-sm text-primary">{statusBadge.label}</span>
           </div>
-          <Link href={`/bids/${auction.id}`} style={{ display: 'block', position: 'absolute', inset: 0 }}>
+          <Link href={`/artwork/${auction.artworkId}`} style={{ display: 'block', position: 'absolute', inset: 0 }}>
             <Image
-              src={auction.artworkImageUrl || "https://placehold.co/400x500"}
+              src={auction.artworkImageUrl || ARTWORK_PLACEHOLDER}
               alt={auction.artworkTitle}
               fill
               sizes="(max-width: 640px) 100vw, 200px"
@@ -157,7 +158,7 @@ export default function SellerBidsClient() {
 
         <div className="auction-info">
           <div className="auction-title-row">
-            <Link href={`/bids/${auction.id}`}>
+            <Link href={`/artwork/${auction.artworkId}`}>
               <h3 className="text-headline-sm text-primary auction-title">{auction.artworkTitle}</h3>
             </Link>
             <span className="text-headline-sm text-accent-gold shrink-0">
@@ -189,7 +190,7 @@ export default function SellerBidsClient() {
           </div>
 
           <div className="seller-bids-actions">
-            <Link href={`/bids/${auction.id}`} className="auction-btn seller-bids-action-primary">
+            <Link href={`/artwork/${auction.artworkId}`} className="auction-btn seller-bids-action-primary">
               View Bids
             </Link>
             <button

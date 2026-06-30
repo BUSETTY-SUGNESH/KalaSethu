@@ -1,57 +1,89 @@
 # Home Page — Issue Report
 
-> **Files:** [`app/(public)/page.tsx`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/(public)/page.tsx)
-> **Components:** `SellerHomePage`, `BuyerHomePage`, `HomePage` (root switcher)
+> **Last updated:** 2026-06-30  
+> **Status:** All issues **resolved**  
+> **Files:** [`app/(public)/page.tsx`](../app/(public)/page.tsx), [`HomeClient.tsx`](../app/(public)/HomeClient.tsx)  
+> **Services:** [`home-admin.service.ts`](../lib/services/server/home-admin.service.ts), [`artwork-service.ts`](../lib/services/artwork-service.ts), [`user-service.ts`](../lib/services/user-service.ts), [`auction-service.ts`](../lib/services/auction-service.ts), [`community-service.ts`](../lib/services/community-service.ts), [`event-service.ts`](../lib/services/event-service.ts)
 
 ---
 
 ## Summary
-The Home page is a role-switching component that renders `SellerHomePage` for artists and `BuyerHomePage` for buyers/collectors. **Both views are entirely static** — no data is fetched from Firestore. Every statistic, artwork card, artist profile, auction listing, community thread, and event entry is hardcoded.
+
+The Home page is a role-switching component that renders `SellerHomePage` for artists and `BuyerHomePage` for buyers/collectors. The page is split into a **server shell** (SEO metadata, JSON-LD, SSR buyer data) and a **client component** (role switch, seller auth data).
+
+**Buyer side:** Hero, trending artists, live auctions, CharchaSabha threads, and Kalent events load from Firestore via `getHomeBuyerDataServer()`. Ticker copy is composed dynamically from live auction and event data with editorial fallback.
+
+**Seller side:** Stats, listed artworks, active bid alerts, and organizer events load client-side from `useAuthStore` user data plus `getArtworksByArtist`, `getAllAuctionsByArtist`, `computeSellerAuctionStats`, and `getEventsByOrganizer`.
 
 ---
 
-## Issues
+## Original Audit Issues
 
-### 🟡 M-06 — Entire Page is Hardcoded Static Content `[NEW]`
-**Lines:** L1-342
-**Description:** Neither `SellerHomePage` nor `BuyerHomePage` calls any service or repository. All data (trending artists, live auctions, community threads, events, seller stats) is embedded as JSX literals with Google-hosted placeholder images.
-**Impact:** The landing page provides zero real-time value to users. It is a visual mockup, not a functional page.
+### ✅ M-06 — Entire Page is Hardcoded Static Content `[RESOLVED]`
+**Was:** All data embedded as JSX literals with Google-hosted placeholder images.  
+**Fix:** Server-fetched buyer data via `getHomeBuyerDataServer()`; seller sections fetch real artworks, auctions, events, and user stats client-side. Images use Firestore URLs with `next/image` and `placehold.co` fallbacks.
 
-### 🔵 L-01 — Hero "View Masterpiece" Links to Slug-Based Route `[NEW]`
-**Lines:** L205
-**Description:** The hero CTA links to `/artwork/the-silent-ascetic`. The app's artwork routing uses Firestore document IDs (e.g., `/artwork/abc123`), not slugs. This route will always 404 or render a "not found" state.
-**Impact:** Primary CTA on the landing page is broken.
+### ✅ L-01 — Hero "View Masterpiece" Links to Slug-Based Route `[VERIFIED]`
+**Was:** CTA linked to `/artwork/the-silent-ascetic` (slug, not Firestore ID).  
+**Status:** Already fixed prior to this pass — CTA uses `/artwork/${featuredArtwork.id}`. Hero title, description, provenance, and image now also render from the featured artwork record.
 
-### 🔵 L-02 — "Place Bid" Buttons Are Non-Functional `[NEW]`
-**Lines:** L278
-**Description:** The "Place Bid" buttons in the Live Auctions section are plain `<button>` elements with no `onClick` handler or link navigation. They render but do nothing when clicked.
-**Impact:** Users cannot interact with the primary conversion action on the home page.
+### ✅ L-02 — "Place Bid" Buttons Are Non-Functional `[RESOLVED]`
+**Was:** Plain `<button>` elements with no handler or navigation.  
+**Fix:** Replaced with `<Link href={`/bids/${auction.id}`}>` matching the Bids page pattern.
 
-### 🔵 L-03 — Trending Artists All Link to `/explore` `[NEW]`
-**Lines:** L236
-**Description:** Every artist card in the "Trending Artists" horizontal scroll links to `/explore` instead of individual artist profile pages (e.g., `/profile/{artistId}`).
-**Impact:** Users cannot navigate to specific artist profiles from the home page.
+### ✅ L-03 — Trending Artists All Link to `/explore` `[RESOLVED]`
+**Was:** Every artist card linked to `/explore`.  
+**Fix:** `getFeaturedArtistsServer(4)` wired; each card links to `/profile/${artist.id}` with descriptive `aria-label`.
 
-### 🔵 L-04 — Seller Dashboard Stats Are Hardcoded `[NEW]`
-**Lines:** L49-52
-**Description:** The seller view displays static values: "Listed Artworks: 12", "Active Auctions: 3", "Total Sales: ₹2,40,000", "Followers: 184". These never change regardless of the actual artist's data.
-**Impact:** Artists see false information about their account performance.
+### ✅ L-04 — Seller Dashboard Stats Are Hardcoded `[RESOLVED]`
+**Was:** Static values ("Listed Artworks: 12", etc.).  
+**Fix:** Stats from `user.artworkCount`, `user.followerCount`, `user.totalRevenue`, and `computeSellerAuctionStats()` active auction count.
 
-### 🔵 L-05 — `suppressHydrationWarning` on Interactive Elements `[NEW]`
-**Lines:** L278
-**Description:** `suppressHydrationWarning` is applied to the "Place Bid" button, masking potential SSR/CSR mismatches rather than fixing them.
-**Impact:** Potential hydration bugs are hidden, making debugging difficult.
+### ✅ L-05 — `suppressHydrationWarning` on Interactive Elements `[RESOLVED]`
+**Was:** Applied to dead Place Bid `<button>`, masking SSR/CSR mismatches.  
+**Fix:** Removed along with the button; Place Bid is now a `<Link>` with no hydration workaround needed.
 
-### 🔵 — No Page-Level SEO Metadata `[NEW]`
-**Description:** The home page has no `<title>`, `<meta name="description">`, or structured data (JSON-LD). For the primary landing page, this is particularly impactful for search engine discoverability.
+### ✅ No Page-Level SEO Metadata `[RESOLVED]`
+**Was:** No `<title>`, meta description, or structured data on the landing page.  
+**Fix:** Server `page.tsx` exports `metadata` (title, description, OpenGraph) and injects JSON-LD `WebSite` schema.
 
-### 🔵 — External Image URLs Hardcoded
-**Description:** All images use Google's `lh3.googleusercontent.com/aida-public/` URLs which are AI-generated placeholder images. These are not real artwork or artist images and will break if Google changes their CDN policies.
+### ✅ External Image URLs Hardcoded `[RESOLVED]`
+**Was:** All images used Google's `lh3.googleusercontent.com/aida-public/` placeholder URLs.  
+**Fix:** Images sourced from Firestore fields (`thumbnailUrl`, `artworkImageUrl`, `avatarUrl`) via `next/image`; `placehold.co` used only as fallback when no URL exists.
 
 ---
 
 ## Accessibility Issues
-- No heading hierarchy validation (seller view has `<h1>` + multiple `<h2>` but buyer view also has `<h1>`)
-- Ticker content has no `aria-live` attribute for screen readers
-- Artist cards lack descriptive `aria-label` attributes
-- Color-only status dots (pulse/active) lack text alternatives
+
+### ✅ Ticker `aria-live` `[RESOLVED]`
+**Was:** Ticker content had no `aria-live` for screen readers.  
+**Fix:** `aria-live="polite"` added to `.ticker-scroll-area` on both buyer and seller tickers.
+
+### ✅ Artist card `aria-label` `[RESOLVED]`
+**Was:** Artist cards lacked descriptive labels.  
+**Fix:** Each artist link has `aria-label={`View ${name}'s profile — ${specialty}`}`.
+
+### ✅ Color-only status dots `[RESOLVED]`
+**Was:** Pulse/active dots conveyed status by color alone.  
+**Fix:** `StatusBadge` component pairs each dot with visible label text and `aria-label={`Status: ${label}`}` on the dot element.
+
+### ✅ Heading hierarchy `[VERIFIED]`
+**Was:** Concern about multiple `<h1>` elements across views.  
+**Status:** Only one role view mounts at a time; each view has a single `<h1>` with proper `<h2>`–`<h4>` nesting below.
+
+---
+
+## Architecture Notes
+
+| Section | Buyer data source | Seller data source |
+|---------|-------------------|-------------------|
+| Hero / Featured | `getFeaturedArtworksServer(1)` | — |
+| Trending Artists | `getFeaturedArtistsServer(4)` | — |
+| Live Auctions | `getEndingSoonAuctionsServer(2)` | Active auctions from `getAllAuctionsByArtist` |
+| CharchaSabha | `getTrendingPostsServer(2)` | — |
+| Kalent Events | `getUpcomingEventsServer(2)` | `getEventsByOrganizer(user.id)` |
+| Stats | — | `user` profile + `computeSellerAuctionStats` |
+| Listed Artworks | — | `getArtworksByArtist(user.id, 2)` |
+| Ticker | Derived from auctions + events | Derived from seller auctions + events |
+
+**Ticker fallback:** No announcements API exists; when Firestore returns no auction/event data, editorial fallback copy is shown.

@@ -1,34 +1,79 @@
 # Customer/Collector Dashboard — Issue Report
 
-> **Files:** [`app/dashboard/page.tsx`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/dashboard/page.tsx), [`app/dashboard/collector/page.tsx`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/dashboard/collector/page.tsx)
+> **Files:** [`app/dashboard/page.tsx`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/dashboard/page.tsx), [`app/dashboard/collector/page.tsx`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/dashboard/collector/page.tsx), [`lib/services/collector-service.ts`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/lib/services/collector-service.ts)
 
 ---
 
 ## Summary
-The Customer Dashboard consists of an overview page and a collector gallery page. **Both are entirely static** with hardcoded data — no Firestore queries, no real user data.
+
+The Customer Dashboard consists of an overview page and a collector gallery page. **All audit issues below are resolved.** Both pages are client components that fetch user-specific data from Firestore via existing services (`order-service`, `auction-service`, `community-service`) and a shared [`collector-service.ts`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/lib/services/collector-service.ts) layer.
+
+**Collection data source:** Delivered/completed marketplace order items plus auction wins (`winnerId === user.id`), deduplicated by `artworkId`. The Firestore `collections` collection remains unused (no repository); purchases are derived from orders and bids as intended.
 
 ---
 
 ## Issues
 
-### 🟡 M-03 — Dashboard Overview Shows Hardcoded Data for "Aakash" `[EXISTING]`
-**File:** [`dashboard/page.tsx:L10`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/dashboard/page.tsx#L10)
-**Description:** The heading reads "Welcome, Aakash" regardless of the logged-in user. The stats (Total Collection: 12, Active Bids: 3, Est. Value: ₹8.5L) are hardcoded. Recent activity and "Updates from Artists" sections show static content.
-**Impact:** No user sees their actual dashboard data. The page is entirely decorative.
-
-### 🟡 M-04 — Collector Dashboard Shows Static Artwork Cards `[EXISTING]`
-**File:** [`dashboard/collector/page.tsx:L24-27`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/dashboard/collector/page.tsx#L24-L27)
-**Description:** The collector gallery shows three hardcoded artwork entries (Terracotta Vessel, Madhubani Krishna, Stone Nandi) with Google placeholder images. No Firestore query is executed to fetch the user's actual purchased artworks.
-**Impact:** Collectors see fake collection data instead of their actual purchases.
-
-### 🔵 — Dashboard Overview is a Server Component Without Data Fetching `[NEW]`
+### ✅ M-03 — Dashboard Overview Shows Hardcoded Data for "Aakash" `[RESOLVED]`
 **File:** [`dashboard/page.tsx`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/dashboard/page.tsx)
-**Description:** This page is a Server Component (no `'use client'` directive). Yet it renders static JSX without any `async` data fetching. It should either be a Client Component that fetches user-specific data, or use SSR with Firebase Admin SDK.
+**Was:** The heading read "Welcome, Aakash" regardless of the logged-in user. Stats, recent activity, and "Updates from Artists" were static.
+**Fix:** Converted to `'use client'`. Loads `getCollectorDashboardData(user.id)` on mount. Welcome uses `user.displayName`; metrics come from real collection items and `getUserBidAnalytics`; activity merges recent bids and orders; artist updates filter feed posts by followed artists. Skeleton loading and empty states added.
+**Files changed:** `app/dashboard/page.tsx`, `lib/services/collector-service.ts`
 
-### 🔵 — Collector Search Input is Unbound `[NEW]`
-**File:** [`dashboard/collector/page.tsx:L18`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/dashboard/collector/page.tsx#L18)
-**Description:** The "Search collection..." input has no `value`, `onChange`, or any state binding.
+### ✅ M-04 — Collector Dashboard Shows Static Artwork Cards `[RESOLVED]`
+**File:** [`dashboard/collector/page.tsx`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/dashboard/collector/page.tsx)
+**Was:** Three hardcoded artwork entries with Google placeholder images; no Firestore queries.
+**Fix:** Fetches `getCollectorItems(user.id)` — delivered/completed order items and auction wins — and renders via `ArtworkCard`. Empty state links to marketplace; skeleton loading on fetch.
+**Files changed:** `app/dashboard/collector/page.tsx`, `lib/services/collector-service.ts`
 
-### 🔵 — Dashboard Overview Button Uses `href` Prop on `Button` Component `[NEW]`
-**File:** [`dashboard/page.tsx:L15`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/dashboard/page.tsx#L15)
-**Description:** `<Button variant="primary" icon="explore" href="/explore">` passes an `href` prop. If the Button component doesn't handle `href` (rendering as an `<a>` tag), this will render a non-navigable button.
+### ✅ Dashboard Overview is a Server Component Without Data Fetching `[RESOLVED]`
+**File:** [`dashboard/page.tsx`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/dashboard/page.tsx)
+**Was:** Server Component with no `async` data fetching.
+**Fix:** Client component with `useEffect` + `useAuthStore`, following the same pattern as `orders/page.tsx` and `saved/page.tsx`.
+**Files changed:** `app/dashboard/page.tsx`
+
+### ✅ Collector Search Input is Unbound `[RESOLVED]`
+**File:** [`dashboard/collector/page.tsx`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/dashboard/collector/page.tsx)
+**Was:** Search input had no `value`, `onChange`, or state binding.
+**Fix:** `searchQuery` state + `useMemo` filter by title/artist; "Clear Search" empty state when no matches.
+**Files changed:** `app/dashboard/collector/page.tsx`
+
+### ✅ Dashboard Overview Button Uses `href` Prop on `Button` Component `[RESOLVED — PRE-EXISTING]`
+**File:** [`app/components/ui/Button.tsx`](file:///c:/Users/Bhyresh%20BS/Documents/Bhyresh/Programs/KalaSethu/app/components/ui/Button.tsx)
+**Was:** Concern that `href` on `Button` might not render a navigable link.
+**Fix:** Already handled — `Button` renders `<Link href={href}>` when `href` is passed (lines 63–68). No change required; overview CTA `href="/explore"` works correctly.
+
+---
+
+## Verification
+
+| Check | Status |
+|-------|--------|
+| Welcome name reflects logged-in user | ✅ |
+| Metrics from real orders/bids | ✅ |
+| Collector gallery from real purchases/wins | ✅ |
+| Both pages are client components with data fetching | ✅ |
+| Search filters collection client-side | ✅ |
+| "Discover New Art" navigates to `/explore` | ✅ |
+| TypeScript (`npx tsc --noEmit`) | ✅ |
+
+**Manual smoke test recommended:** Log in with accounts that have completed orders, active bids, followed artists, and an empty collection to confirm empty states.
+
+---
+
+## Remaining Issues
+
+None from this audit.
+
+---
+
+## Regression Risks
+
+| Risk | Mitigation |
+|------|------------|
+| Extra Firestore reads on dashboard load | Page sizes capped (orders/bids 50, feed 20); parallel fetches |
+| `getUserBidAnalytics` Cloud Function failure | Falls back to `EMPTY_BID_ANALYTICS` |
+| Partial fetch failure | Errors logged; page renders with defaults/empty states |
+| Auction wins only among bid-on auctions | Expected domain behavior |
+
+**Deployment:** No infra changes expected. Re-test if Firestore index errors appear at runtime.

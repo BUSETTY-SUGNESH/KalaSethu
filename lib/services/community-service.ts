@@ -2,13 +2,15 @@
 // KalaSetu — Community Service (Posts, Likes, Comments, Follow)
 // Business logic layer bridging UI to Repository layer.
 // ============================================================
-import { communityRepository } from '@/lib/repositories';
+import { communityRepository, userRepository } from '@/lib/repositories';
 import type {
   Post,
   Comment,
   Follow,
   Bookmark,
   PaginatedResult,
+  CommunityContributor,
+  UserRole,
 } from '@/app/types';
 import type { DocumentSnapshot } from '@/lib/firebase/firestore';
 
@@ -29,6 +31,7 @@ export async function createPost(
     artworkId?: string;
     artworkTitle?: string;
     artworkImageUrl?: string;
+    authorRole?: UserRole;
   }
 ): Promise<string> {
   const now = new Date().toISOString();
@@ -37,6 +40,7 @@ export async function createPost(
     authorName,
     authorAvatarUrl,
     authorVerified,
+    authorRole: data.authorRole,
     type: data.type,
     title: data.title,
     content: data.content,
@@ -79,6 +83,58 @@ export async function getUserPosts(
   lastDoc?: DocumentSnapshot | null
 ): Promise<PaginatedResult<Post>> {
   return communityRepository.getByAuthor(userId, pageSize, lastDoc);
+}
+
+export async function getPostsByCategory(
+  category: string,
+  pageSize: number = 20,
+  lastDoc?: DocumentSnapshot | null
+): Promise<PaginatedResult<Post>> {
+  return communityRepository.getByCategory(category, pageSize, lastDoc);
+}
+
+export async function pinPost(postId: string, userId: string): Promise<void> {
+  const post = await communityRepository.findPost(postId);
+  if (!post) throw new Error('Post not found');
+  if (post.authorId !== userId) throw new Error('Only the author can pin this discussion');
+  const now = new Date().toISOString();
+  await communityRepository.updatePost(postId, {
+    isPinned: true,
+    pinnedAt: now,
+    pinnedBy: userId,
+  });
+}
+
+export async function unpinPost(postId: string, userId: string): Promise<void> {
+  const post = await communityRepository.findPost(postId);
+  if (!post) throw new Error('Post not found');
+  if (post.authorId !== userId) throw new Error('Only the author can unpin this discussion');
+  await communityRepository.updatePost(postId, { isPinned: false });
+}
+
+export async function getTopContributors(limit: number = 5): Promise<CommunityContributor[]> {
+  const posts = await communityRepository.getRecentPosts(100);
+  const contributors = communityRepository.aggregateTopContributors(posts, limit);
+
+  const enriched = await Promise.all(
+    contributors.map(async (contributor) => {
+      try {
+        const profile = await userRepository.findById(contributor.authorId);
+        if (!profile) return contributor;
+        return {
+          ...contributor,
+          specialty: profile.specialty ?? contributor.specialty,
+          authorAvatarUrl: contributor.authorAvatarUrl ?? profile.avatarUrl,
+          authorRole: contributor.authorRole ?? profile.role,
+          isVerified: profile.isVerified || profile.role === 'verified_artist',
+        };
+      } catch {
+        return contributor;
+      }
+    })
+  );
+
+  return enriched;
 }
 
 export async function deletePost(postId: string): Promise<void> {

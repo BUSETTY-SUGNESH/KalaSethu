@@ -24,6 +24,7 @@ import type {
   Report,
   AdminLog,
   PlatformAnalytics,
+  PlatformStats,
   FeatureFlag,
   PaginatedResult,
 } from '@/app/types';
@@ -136,9 +137,9 @@ export const adminRepository = {
     return { id: snap.docs[0].id, ...snap.docs[0].data() } as unknown as PlatformAnalytics;
   },
 
-  async getPlatformStats(): Promise<any | null> {
+  async getPlatformStats(): Promise<PlatformStats | null> {
     const snap = await getDoc(doc(db, 'analytics', 'platform_stats'));
     if (!snap.exists()) return null;
-    return snap.data();
+    return snap.data() as PlatformStats;
   },
 };

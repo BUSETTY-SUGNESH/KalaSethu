@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
 import { getBuyerOrders } from "@/lib/services/order-service";
@@ -109,8 +110,14 @@ export default function OrdersPage() {
                 <ul className="flex flex-col gap-24">
                   {order.items.map((item, idx) => (
                     <li key={idx} className="flex gap-24">
-                      <div style={{ width: 80, height: 80, borderRadius: "var(--radius-sm)", overflow: "hidden", flexShrink: 0 }}>
-                        <img src={item.artworkImageUrl || ARTWORK_PLACEHOLDER} alt={item.artworkTitle} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      <div style={{ width: 80, height: 80, borderRadius: "var(--radius-sm)", overflow: "hidden", flexShrink: 0, position: "relative" }}>
+                        <Image
+                          src={item.artworkImageUrl || ARTWORK_PLACEHOLDER}
+                          alt={item.artworkTitle}
+                          fill
+                          sizes="80px"
+                          style={{ objectFit: "cover" }}
+                        />
                       </div>
                       <div className="flex flex-col grow justify-center">
                         <Link href={`/artwork/${item.artworkId}`} className="text-headline-sm text-primary hover:underline">

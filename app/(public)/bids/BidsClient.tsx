@@ -8,6 +8,7 @@ import Button from "@/app/components/ui/Button";
 import type { Auction, AuctionStatus } from "@/app/types";
 import { formatDistanceToNow } from "date-fns";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { ARTWORK_PLACEHOLDER } from "@/lib/constants/placeholders";
 import {
   getUserBidAnalytics,
   getUserBids,
@@ -334,9 +335,9 @@ export default function BidsClient({ initialAuctions }: { initialAuctions: Aucti
               </span>
             </div>
           )}
-          <Link href={`/bids/${auction.id}`} style={{ display: 'block', position: 'absolute', inset: 0 }}>
+          <Link href={`/artwork/${auction.artworkId}`} style={{ display: 'block', position: 'absolute', inset: 0 }}>
             <Image
-              src={auction.artworkImageUrl || "https://placehold.co/400x500"}
+              src={auction.artworkImageUrl || ARTWORK_PLACEHOLDER}
               alt={auction.artworkTitle}
               fill
               sizes={variant === 'list' ? '(max-width: 640px) 100vw, 240px' : '(max-width: 768px) 100vw, 50vw'}
@@ -348,7 +349,7 @@ export default function BidsClient({ initialAuctions }: { initialAuctions: Aucti
 
         <div className="auction-info">
           <div className="auction-title-row">
-            <Link href={`/bids/${auction.id}`}>
+            <Link href={`/artwork/${auction.artworkId}`}>
               <h3 className="text-headline-sm text-primary auction-title">{auction.artworkTitle}</h3>
             </Link>
             <span className="text-headline-sm text-accent-gold shrink-0">
@@ -384,7 +385,7 @@ export default function BidsClient({ initialAuctions }: { initialAuctions: Aucti
             )}
           </div>
 
-          <Link href={`/bids/${auction.id}`} className="auction-btn" style={{ textDecoration: 'none', display: 'block' }}>
+          <Link href={`/artwork/${auction.artworkId}`} className="auction-btn" style={{ textDecoration: 'none', display: 'block' }}>
             {isMyBids ? 'View Auction' : 'Place Bid'}
           </Link>
         </div>

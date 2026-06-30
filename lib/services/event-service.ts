@@ -49,6 +49,17 @@ export async function getUpcomingEvents(
   return eventRepository.findUpcoming(pageSize, lastDoc);
 }
 
+export async function getEventsByOrganizer(organizerId: string): Promise<CalendarEvent[]> {
+  return eventRepository.findByOrganizer(organizerId);
+}
+
+export async function updateEvent(
+  eventId: string,
+  data: Partial<CalendarEvent>
+): Promise<void> {
+  return eventRepository.update(eventId, data);
+}
+
 export async function getEventsByType(
   type: CalendarEvent['type'],
   pageSize: number = 20,

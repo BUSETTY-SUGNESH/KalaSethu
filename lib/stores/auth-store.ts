@@ -24,7 +24,7 @@ interface AuthState {
   isModerator: () => boolean;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   firebaseUser: null,
   isLoading: true,
@@ -87,3 +87,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return user?.role === 'moderator' || user?.role === 'admin' || false;
   },
 }));
+
+// Preserve auth state across Fast Refresh so isLoading does not reset to true
+// and unmount the router tree while HMR is applying updates.
+const AUTH_STORE_HMR_KEY = '__kalasethu_auth_store__';
+
+if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
+  const persisted = (window as unknown as Record<string, Partial<AuthState>>)[AUTH_STORE_HMR_KEY];
+  if (persisted) {
+    useAuthStore.setState(persisted);
+  }
+
+  useAuthStore.subscribe((state) => {
+    (window as unknown as Record<string, Partial<AuthState>>)[AUTH_STORE_HMR_KEY] = {
+      user: state.user,
+      firebaseUser: state.firebaseUser,
+      isLoading: state.isLoading,
+      isAuthenticated: state.isAuthenticated,
+    };
+  });
+}
+
+export { useAuthStore };

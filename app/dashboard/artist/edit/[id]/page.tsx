@@ -44,7 +44,7 @@ export default function ArtworkEditPage() {
   const router = useRouter();
   const params = useParams();
   const artworkId = params.id as string;
-  const { user, isArtist } = useAuthStore();
+  const { user } = useAuthStore();
   const { addToast } = useUIStore();
 
   const [isLoading, setIsLoading] = useState(true);
@@ -69,11 +69,6 @@ export default function ArtworkEditPage() {
 
   useEffect(() => {
     if (!user || !artworkId) return;
-
-    if (!isArtist()) {
-      router.push("/dashboard");
-      return;
-    }
 
     const artistId = user.id;
 
@@ -115,7 +110,7 @@ export default function ArtworkEditPage() {
     }
 
     loadArtwork();
-  }, [user, artworkId, router, addToast, isArtist]);
+  }, [user, artworkId, router, addToast]);
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     if (!e.target.files) return;

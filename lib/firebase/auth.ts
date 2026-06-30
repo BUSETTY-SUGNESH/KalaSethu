@@ -8,11 +8,14 @@ import {
   signInWithPopup,
   signInWithPhoneNumber,
   GoogleAuthProvider,
+  EmailAuthProvider,
   RecaptchaVerifier,
   sendEmailVerification,
   sendPasswordResetEmail,
   updatePassword,
   updateProfile,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
   signOut as firebaseSignOut,
   onAuthStateChanged as firebaseOnAuthStateChanged,
   deleteUser,
@@ -95,11 +98,44 @@ export async function resetPassword(email: string): Promise<void> {
   return sendPasswordResetEmail(auth, email);
 }
 
-export async function changePassword(newPassword: string): Promise<void> {
+export function hasPasswordProvider(): boolean {
   const user = auth.currentUser;
-  if (user) {
-    await updatePassword(user, newPassword);
+  if (!user) return false;
+  return user.providerData.some((provider) => provider.providerId === 'password');
+}
+
+export async function reauthenticateWithPassword(currentPassword: string): Promise<void> {
+  const user = auth.currentUser;
+  if (!user?.email) {
+    throw new Error('No authenticated user with email');
   }
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+}
+
+export async function reauthenticateWithGoogle(): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('No authenticated user');
+  }
+  await reauthenticateWithPopup(user, googleProvider);
+}
+
+export async function changePassword(
+  newPassword: string,
+  currentPassword?: string
+): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('No authenticated user');
+  }
+  if (hasPasswordProvider()) {
+    if (!currentPassword) {
+      throw new Error('Current password is required');
+    }
+    await reauthenticateWithPassword(currentPassword);
+  }
+  await updatePassword(user, newPassword);
 }
 
 // --- Profile Updates ---

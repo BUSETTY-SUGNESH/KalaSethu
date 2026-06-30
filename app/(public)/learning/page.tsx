@@ -1,8 +1,10 @@
 'use client';
 
 import Link from "next/link";
+import Image from "next/image";
 import Icon from "@/app/components/ui/Icon";
 import Button from "@/app/components/ui/Button";
+import { ARTWORK_PLACEHOLDER } from "@/lib/constants/placeholders";
 
 export default function LearningPage() {
   return (
@@ -40,7 +42,7 @@ export default function LearningPage() {
               duration: "4 Weeks",
               level: "Beginner",
               price: "₹2,500",
-              img: "https://placehold.co/600x400?text=Madhubani"
+              img: ARTWORK_PLACEHOLDER
             },
             {
               title: "Advanced Bronze Casting Techniques",
@@ -48,7 +50,7 @@ export default function LearningPage() {
               duration: "6 Weeks",
               level: "Advanced",
               price: "₹8,000",
-              img: "https://placehold.co/600x400?text=Bronze"
+              img: ARTWORK_PLACEHOLDER
             },
             {
               title: "Natural Dyeing for Textiles",
@@ -56,12 +58,18 @@ export default function LearningPage() {
               duration: "2 Weeks",
               level: "Intermediate",
               price: "₹3,200",
-              img: "https://placehold.co/600x400?text=Textiles"
+              img: ARTWORK_PLACEHOLDER
             }
           ].map((course, i) => (
             <div key={i} className="card p-0 overflow-hidden">
-              <div style={{ height: 200, width: "100%" }}>
-                <img src={course.img} alt={course.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <div style={{ height: 200, width: "100%", position: "relative" }}>
+                <Image
+                  src={course.img}
+                  alt={course.title}
+                  fill
+                  sizes="(max-width: 768px) 100vw, 300px"
+                  style={{ objectFit: "cover" }}
+                />
               </div>
               <div className="p-24" style={{ padding: 24 }}>
                 <div className="flex justify-between items-start mb-8">
