@@ -41,7 +41,8 @@
         "*.md",
         "Bids-Analysis.md",
         "home.html"
-      ]
+      ],
+      "alwaysDeployFromSource": true
     }
   ],
   "emulators": {
