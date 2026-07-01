@@ -79,6 +79,64 @@ Run the Firebase Emulators (for backend):
 firebase emulators:start
 ```
 
+## Deploy to Firebase App Hosting
+
+KalaSetu uses **Firebase App Hosting** for the Next.js frontend (SSR, API routes, middleware).
+Cloud Functions, Firestore rules, and Storage rules deploy separately via the same Firebase project.
+
+### Prerequisites
+- Blaze pricing plan
+- Firebase CLI **v14.4.0+** (`npm i -g firebase-tools`)
+- Logged in: `firebase login`
+
+### First-time setup
+
+1. **Create the App Hosting backend** (once per project):
+   ```bash
+   firebase apphosting:backends:create --project kala-sethu
+   ```
+   Or use the Firebase Console → **Hosting & Serverless → App Hosting → Create backend**.
+   - Backend ID: `kalasethu` (must match `firebase.json`)
+   - Region: choose closest to users (e.g. `asia-south1` or `us-east4`)
+   - Link your Firebase Web App (enables `FIREBASE_WEBAPP_CONFIG` at build)
+
+2. **Set environment variables** in Firebase Console → App Hosting → `kalasethu` → **Settings → Environment**  
+   Paste all keys from `.env.example` / `.env.local` (except secrets below).
+
+3. **Create secrets** in Cloud Secret Manager:
+   ```bash
+   firebase apphosting:secrets:set FIREBASE_ADMIN_PRIVATE_KEY
+   firebase apphosting:secrets:set AUTH_SESSION_SECRET
+   firebase apphosting:secrets:set MIDDLEWARE_SECRET
+   firebase apphosting:secrets:grantaccess FIREBASE_ADMIN_PRIVATE_KEY kalasethu
+   firebase apphosting:secrets:grantaccess AUTH_SESSION_SECRET kalasethu
+   firebase apphosting:secrets:grantaccess MIDDLEWARE_SECRET kalasethu
+   ```
+
+4. **Deploy Cloud Functions** (Razorpay, auctions, etc.):
+   ```bash
+   npm run deploy:functions
+   ```
+
+5. **Deploy the web app**:
+   ```bash
+   npm run deploy:apphosting
+   ```
+   Or deploy everything: `npm run deploy:firebase`
+
+### Post-deploy Console steps
+- Add your App Hosting URL to **Authentication → Authorized domains**
+- Register the domain in **App Check** (reCAPTCHA v3)
+- Set `NEXT_PUBLIC_APP_URL` to your live App Hosting URL
+- Configure Razorpay webhook URL to your Cloud Functions endpoint
+
+### Configuration files
+| File | Purpose |
+|------|---------|
+| `firebase.json` | App Hosting backend ID, deploy ignore list, Functions, rules |
+| `apphosting.yaml` | Cloud Run resources, secrets, env availability |
+| `apphosting.emulator.yaml` | Local App Hosting emulator secret refs |
+
 ## Architecture
 - `app/`: Next.js App Router containing pages, layouts, and admin views.
 - `lib/services/`: Service abstraction layer communicating with Firestore and Cloud Functions.
