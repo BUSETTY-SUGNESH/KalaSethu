@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { adminAuth, adminDb } from '@/lib/firebase/admin';
+import { getAdminAuth } from '@/lib/firebase/admin-auth';
+import { getAdminDb } from '@/lib/firebase/admin-db';
 import { sealAuthContext } from '@/lib/auth/session-crypto';
 import {
   AUTH_CONTEXT_COOKIE_NAME,
@@ -7,6 +8,8 @@ import {
   SESSION_MAX_AGE_SEC,
   type AuthContextPayload,
 } from '@/lib/auth/session-config';
+
+export const runtime = 'nodejs';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -26,6 +29,8 @@ export async function POST(request: NextRequest) {
     }
 
     const expiresInMs = SESSION_MAX_AGE_SEC * 1000;
+    const adminAuth = await getAdminAuth();
+    const adminDb = await getAdminDb();
     const decoded = await adminAuth.verifyIdToken(idToken);
     const sessionCookie = await adminAuth.createSessionCookie(idToken, { expiresIn: expiresInMs });
 

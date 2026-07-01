@@ -50,3 +50,6 @@ firebase-debug.*.log
 
 # test artifacts
 testsprite_tests/tmp/
+
+# firebase service keys
+*-firebase-adminsdk-*.json

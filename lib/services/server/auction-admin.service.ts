@@ -1,4 +1,4 @@
-import { adminDb } from '@/lib/firebase/admin';
+import { getAdminDb } from '@/lib/firebase/admin-db';
 import type { Auction, Bid } from '@/app/types';
 import { AUCTION_BID_HISTORY_LIMIT } from '@/lib/constants/auction';
 import { pickPrimaryAuction } from '@/lib/utils/artwork-listing-state';
@@ -14,7 +14,8 @@ export function isValidAuctionId(id: unknown): id is string {
  */
 export async function getActiveAuctionsServer(limit: number = 10): Promise<Auction[]> {
   try {
-    const snapshot = await adminDb
+    const db = await getAdminDb();
+    const snapshot = await db
       .collection('auctions')
       .where('status', 'in', ['live', 'scheduled', 'ending_soon'])
       .orderBy('endsAt', 'asc')
@@ -42,7 +43,8 @@ export async function getAuctionServer(auctionId: string): Promise<Auction | nul
   }
 
   try {
-    const doc = await adminDb.collection('auctions').doc(auctionId).get();
+    const db = await getAdminDb();
+    const doc = await db.collection('auctions').doc(auctionId).get();
     if (!doc.exists) return null;
     
     const data = doc.data();
@@ -64,7 +66,8 @@ export async function getAuctionBidsServer(auctionId: string): Promise<Bid[]> {
   }
 
   try {
-    const snapshot = await adminDb
+    const db = await getAdminDb();
+    const snapshot = await db
       .collection('auctions')
       .doc(auctionId)
       .collection('bids')
@@ -90,7 +93,8 @@ export async function getAuctionForArtworkServer(artworkId: string): Promise<Auc
   if (typeof artworkId !== 'string' || !artworkId.trim()) return null;
 
   try {
-    const snapshot = await adminDb
+    const db = await getAdminDb();
+    const snapshot = await db
       .collection('auctions')
       .where('artworkId', '==', artworkId)
       .orderBy('createdAt', 'desc')

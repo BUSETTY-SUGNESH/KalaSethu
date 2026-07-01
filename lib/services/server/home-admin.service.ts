@@ -1,4 +1,4 @@
-import { adminDb } from '@/lib/firebase/admin';
+import { getAdminDb } from '@/lib/firebase/admin-db';
 import type { Artwork, Auction, CalendarEvent, MarketplaceCategorySummary, Post, UserProfile } from '@/app/types';
 import { getMarketplaceCategorySummariesServer } from '@/lib/services/server/artwork-admin.service';
 
@@ -74,7 +74,8 @@ export interface HomeBuyerData {
 
 export async function getFeaturedArtworksServer(count: number = 1): Promise<Artwork[]> {
   try {
-    const snapshot = await adminDb
+    const db = await getAdminDb();
+    const snapshot = await db
       .collection('artworks')
       .where('status', '==', 'published')
       .where('isFeatured', '==', true)
@@ -90,7 +91,8 @@ export async function getFeaturedArtworksServer(count: number = 1): Promise<Artw
 
 export async function getFeaturedArtistsServer(count: number = 8): Promise<UserProfile[]> {
   try {
-    const snapshot = await adminDb
+    const db = await getAdminDb();
+    const snapshot = await db
       .collection('users')
       .where('role', 'in', ['artist', 'verified_artist'])
       .where('isVerified', '==', true)
@@ -106,7 +108,8 @@ export async function getFeaturedArtistsServer(count: number = 8): Promise<UserP
 
 export async function getEndingSoonAuctionsServer(count: number = 6): Promise<Auction[]> {
   try {
-    const snapshot = await adminDb
+    const db = await getAdminDb();
+    const snapshot = await db
       .collection('auctions')
       .where('status', 'in', ['live', 'ending_soon'])
       .orderBy('endsAt', 'asc')
@@ -121,7 +124,8 @@ export async function getEndingSoonAuctionsServer(count: number = 6): Promise<Au
 
 export async function getTrendingPostsServer(count: number = 3): Promise<Post[]> {
   try {
-    const snapshot = await adminDb
+    const db = await getAdminDb();
+    const snapshot = await db
       .collection('posts')
       .where('isTrending', '==', true)
       .orderBy('likeCount', 'desc')
@@ -136,7 +140,8 @@ export async function getTrendingPostsServer(count: number = 3): Promise<Post[]>
 
 export async function getUpcomingEventsServer(count: number = 4): Promise<CalendarEvent[]> {
   try {
-    const snapshot = await adminDb
+    const db = await getAdminDb();
+    const snapshot = await db
       .collection('events')
       .where('status', '==', 'upcoming')
       .orderBy('startDate', 'asc')
@@ -151,7 +156,8 @@ export async function getUpcomingEventsServer(count: number = 4): Promise<Calend
 
 export async function getTrendingArtworksServer(count: number = 8): Promise<Artwork[]> {
   try {
-    const snapshot = await adminDb
+    const db = await getAdminDb();
+    const snapshot = await db
       .collection('artworks')
       .where('status', '==', 'published')
       .orderBy('viewCount', 'desc')
@@ -169,7 +175,8 @@ export async function getTrendingArtworksServer(count: number = 8): Promise<Artw
 
 export async function getRecentlyListedArtworksServer(count: number = 8): Promise<Artwork[]> {
   try {
-    const snapshot = await adminDb
+    const db = await getAdminDb();
+    const snapshot = await db
       .collection('artworks')
       .where('status', '==', 'published')
       .orderBy('createdAt', 'desc')
@@ -184,7 +191,8 @@ export async function getRecentlyListedArtworksServer(count: number = 8): Promis
 
 export async function getRecentlySoldArtworksServer(count: number = 6): Promise<Artwork[]> {
   try {
-    const snapshot = await adminDb
+    const db = await getAdminDb();
+    const snapshot = await db
       .collection('artworks')
       .where('status', '==', 'sold')
       .orderBy('updatedAt', 'desc')

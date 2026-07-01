@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getFeatureFlagsServer } from '@/lib/services/server/feature-flags.service';
 
+export const runtime = 'nodejs';
+
 function isAuthorizedInternalRequest(request: NextRequest): boolean {
   const secret = process.env.MIDDLEWARE_SECRET;
   if (!secret) return false;

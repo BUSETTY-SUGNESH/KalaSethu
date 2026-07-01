@@ -1,4 +1,4 @@
-import { adminDb } from '@/lib/firebase/admin';
+import { getAdminDb } from '@/lib/firebase/admin-db';
 import type { Artwork, MarketplaceCategorySummary } from '@/app/types';
 import type { ArtworkPaginationCursor } from '@/lib/firebase/firestore';
 import { ARTWORK_CATEGORIES, CATEGORY_PLACEHOLDER_IMAGE } from '@/lib/constants/artwork-categories';
@@ -22,7 +22,8 @@ export async function getArtworkServer(artworkId: string): Promise<Artwork | nul
   if (!isValidArtworkId(artworkId)) return null;
 
   try {
-    const doc = await adminDb.collection('artworks').doc(artworkId).get();
+    const db = await getAdminDb();
+    const doc = await db.collection('artworks').doc(artworkId).get();
     if (!doc.exists) return null;
     return mapArtworkDoc(doc);
   } catch (error) {
@@ -43,7 +44,8 @@ export async function getPublishedArtworksServer(
     sortBy?: 'newest' | 'price_low' | 'price_high' | 'popular';
   }
 ) {
-  let query: FirebaseFirestore.Query = adminDb.collection('artworks').where('status', '==', 'published');
+  const db = await getAdminDb();
+  let query: FirebaseFirestore.Query = db.collection('artworks').where('status', '==', 'published');
 
   if (filters?.category) {
     query = query.where('category', '==', filters.category);
@@ -112,9 +114,10 @@ export async function getPublishedArtworksServer(
 }
 
 export async function getMarketplaceCategorySummariesServer(): Promise<MarketplaceCategorySummary[]> {
+  const db = await getAdminDb();
   return Promise.all(
     ARTWORK_CATEGORIES.map(async ({ slug, label }) => {
-      const baseQuery = adminDb
+      const baseQuery = db
         .collection('artworks')
         .where('status', '==', 'published')
         .where('category', '==', slug);

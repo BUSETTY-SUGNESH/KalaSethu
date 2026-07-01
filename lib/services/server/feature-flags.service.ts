@@ -1,6 +1,6 @@
 // Server-only module — do not import from client components.
 
-import { adminDb } from '@/lib/firebase/admin';
+import { getAdminDb } from '@/lib/firebase/admin-db';
 import {
   DEFAULT_FEATURE_FLAG_STATE,
   type FeatureFlagId,
@@ -19,7 +19,8 @@ export async function getFeatureFlagsServer(): Promise<Record<FeatureFlagId, boo
   const flags = { ...DEFAULT_FEATURE_FLAG_STATE };
 
   try {
-    const snap = await adminDb.collection('featureFlags').get();
+    const db = await getAdminDb();
+    const snap = await db.collection('featureFlags').get();
     for (const doc of snap.docs) {
       const id = doc.id as FeatureFlagId;
       if (id in flags) {
