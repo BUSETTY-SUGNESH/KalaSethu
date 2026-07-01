@@ -22,29 +22,6 @@
       ]
     }
   ],
-  "apphosting": [
-    {
-      "backendId": "kalasethu",
-      "rootDir": ".",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
-        "functions",
-        "testsprite_tests",
-        "audits",
-        "docs",
-        ".next",
-        "out",
-        "coverage",
-        "*.md",
-        "Bids-Analysis.md",
-        "home.html"
-      ],
-      "alwaysDeployFromSource": true
-    }
-  ],
   "emulators": {
     "auth": {
       "port": 9099

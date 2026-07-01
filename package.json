@@ -7,10 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "deploy:apphosting": "firebase deploy --only apphosting:kalasethu",
     "deploy:functions": "firebase deploy --only functions",
     "deploy:rules": "firebase deploy --only firestore,storage,database",
-    "deploy:firebase": "firebase deploy --only apphosting:kalasethu,functions,firestore,storage,database",
+    "deploy:firebase": "firebase deploy --only functions,firestore,storage,database",
     "migrate:collector-roles": "node scripts/migrate-collector-roles.mjs",
     "migrate:collector-roles:dry-run": "node scripts/migrate-collector-roles.mjs --dry-run"
   },

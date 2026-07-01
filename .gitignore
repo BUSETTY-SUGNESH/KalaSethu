@@ -36,11 +36,8 @@ yarn-error.log*
 functions/.env
 !functions/.env.example
 
-# vercel (legacy; project deploys via Firebase App Hosting)
+# vercel
 .vercel
-
-# firebase app hosting local overrides (may contain plaintext secrets)
-apphosting.local.yaml
 
 # typescript
 *.tsbuildinfo
