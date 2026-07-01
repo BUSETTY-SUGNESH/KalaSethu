@@ -24,6 +24,17 @@ firebase deploy --only functions:sendChannelMessage,functions:toggleReaction,fun
 
 Or deploy all functions: `firebase deploy --only functions`
 
+### Community announcement auto-posts (optional)
+
+When artwork is published, an auction is created, or an event is created, system messages are posted to the artist's `#announcements` channel:
+
+```bash
+cd functions && npm run build
+firebase deploy --only functions:onArtworkWritten,functions:onAuctionCreated,functions:onEventCreated
+```
+
+(`onArtworkWritten` already exists; redeploy picks up the new announcement hook inside it.)
+
 ## Post-deploy verification
 
 ### Direct messages (1:1)

@@ -9,6 +9,7 @@ import { assertRateLimit } from './utils/rate-limit';
 import { assertFeatureEnabled, assertNotInMaintenance } from './utils/feature-flags';
 import { ChunkedBatchWriter } from './utils/batch-commit';
 import { FIRESTORE_TRIGGER_REGION } from './constants/regions';
+import { postArtistCommunityAnnouncement } from './utils/community-announcements';
 
 function isKeywordMaintenanceWrite(
   prevData: admin.firestore.DocumentData | undefined,
@@ -136,6 +137,18 @@ export const onArtworkWritten = functions.region(FIRESTORE_TRIGGER_REGION).fires
         }
       } catch (error) {
         console.error("Error processing artwork publication notifications", error);
+      }
+
+      try {
+        await postArtistCommunityAnnouncement(db, artistId, {
+          event: 'artwork_published',
+          title: data?.title || 'New artwork',
+          body: `${data?.artistName || 'An artist'} published a new artwork: "${data?.title || 'Untitled'}"`,
+          actionUrl: `/artwork/${artworkId}`,
+          artworkId,
+        });
+      } catch (error) {
+        console.error('Error posting community artwork announcement', error);
       }
     }
   });

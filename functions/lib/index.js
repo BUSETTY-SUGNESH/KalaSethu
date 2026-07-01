@@ -43,6 +43,7 @@ admin.initializeApp();
 __exportStar(require("./auth"), exports);
 __exportStar(require("./artwork"), exports);
 __exportStar(require("./auction"), exports);
+__exportStar(require("./events"), exports);
 __exportStar(require("./payment"), exports);
 __exportStar(require("./order"), exports);
 __exportStar(require("./community"), exports);

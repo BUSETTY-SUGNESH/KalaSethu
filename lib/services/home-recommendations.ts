@@ -3,6 +3,7 @@
 // Derives suggestions from bookmarks, bids, and followed artists.
 // ============================================================
 import type { Artwork } from '@/app/types';
+import { isValidQueryString } from '@/lib/firebase/query-guards';
 import { getArtwork, getPublishedArtworks, getPublishedArtworksByArtist } from '@/lib/services/artwork-service';
 import { getUserBookmarks, getFollowing } from '@/lib/services/community-service';
 import { getAuctionsByIds, getUserBids } from '@/lib/services/auction-service';
@@ -58,6 +59,10 @@ export async function getPersonalizedArtworks(
   excludeIds: string[] = [],
   limit = 8
 ): Promise<Artwork[]> {
+  if (!isValidQueryString(userId)) {
+    return [];
+  }
+
   const cached = readCache(userId);
   if (cached) {
     return dedupeArtworks(cached, new Set(excludeIds), limit);
@@ -73,7 +78,10 @@ export async function getPersonalizedArtworks(
       getUserBids(userId, 15),
     ]);
 
-    const bookmarkIds = bookmarks.map((b) => b.targetId).filter(Boolean).slice(0, 8);
+    const bookmarkIds = bookmarks
+      .map((b) => b.targetId)
+      .filter(isValidQueryString)
+      .slice(0, 8);
     const bookmarkArtworks = (
       await Promise.all(bookmarkIds.map((id) => getArtwork(id)))
     ).filter((a): a is Artwork => !!a);
@@ -85,10 +93,12 @@ export async function getPersonalizedArtworks(
       if (a.medium) mediums.add(a.medium);
     }
 
-    const auctionIds = [...new Set(bidsResult.data.map((b) => b.auctionId).filter(Boolean))];
+    const auctionIds = [
+      ...new Set(bidsResult.data.map((b) => b.auctionId).filter(isValidQueryString)),
+    ];
     if (auctionIds.length > 0) {
       const auctions = await getAuctionsByIds(auctionIds);
-      const bidArtworkIds = auctions.map((a) => a.artworkId).filter(Boolean).slice(0, 6);
+      const bidArtworkIds = auctions.map((a) => a.artworkId).filter(isValidQueryString).slice(0, 6);
       const bidArtworks = (
         await Promise.all(bidArtworkIds.map((id) => getArtwork(id)))
       ).filter((a): a is Artwork => !!a);
@@ -98,19 +108,24 @@ export async function getPersonalizedArtworks(
       collected.push(...bidArtworks);
     }
 
-    const categoryList = [...categories].slice(0, 3);
+    const categoryList = [...categories].filter(isValidQueryString).slice(0, 3);
     for (const category of categoryList) {
       const result = await getPublishedArtworks(6, null, { category, sortBy: 'popular' });
       collected.push(...result.data);
     }
 
     if (collected.length < limit && mediums.size > 0) {
-      const medium = [...mediums][0];
-      const result = await getPublishedArtworks(6, null, { medium, sortBy: 'newest' });
-      collected.push(...result.data);
+      const medium = [...mediums].find(isValidQueryString);
+      if (medium) {
+        const result = await getPublishedArtworks(6, null, { medium, sortBy: 'newest' });
+        collected.push(...result.data);
+      }
     }
 
-    const followedIds = following.map((f) => f.followingId).slice(0, 5);
+    const followedIds = following
+      .map((f) => f.followingId)
+      .filter(isValidQueryString)
+      .slice(0, 5);
     for (const artistId of followedIds) {
       const result = await getPublishedArtworksByArtist(artistId, 3);
       collected.push(...result.data);

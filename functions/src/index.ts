@@ -7,6 +7,7 @@ admin.initializeApp();
 export * from "./auth";
 export * from "./artwork";
 export * from "./auction";
+export * from "./events";
 export * from "./payment";
 export * from "./order";
 export * from "./community";

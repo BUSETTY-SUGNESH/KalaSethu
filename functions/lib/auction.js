@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUserBidAnalytics = exports.updateAuction = exports.cancelAuction = exports.auctionEndingSoon = exports.closeEndedAuctions = exports.startScheduledAuctions = exports.placeBid = void 0;
+exports.onAuctionCreated = exports.getUserBidAnalytics = exports.updateAuction = exports.cancelAuction = exports.auctionEndingSoon = exports.closeEndedAuctions = exports.startScheduledAuctions = exports.placeBid = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const config_1 = require("./config");
@@ -44,6 +44,8 @@ const feature_flags_1 = require("./utils/feature-flags");
 const schema_validation_1 = require("./utils/schema-validation");
 const notification_helpers_1 = require("./notification-helpers");
 const batch_commit_1 = require("./utils/batch-commit");
+const regions_1 = require("./constants/regions");
+const community_announcements_1 = require("./utils/community-announcements");
 // ─────────────────────────────────────────────────────────────
 // placeBid — Secure callable function to place bids
 // ─────────────────────────────────────────────────────────────
@@ -649,6 +651,35 @@ exports.getUserBidAnalytics = functions.region('asia-south1').https.onCall(async
     catch (error) {
         console.error('Error calculating bid analytics:', error);
         throw new functions.https.HttpsError('internal', 'Unable to calculate analytics.');
+    }
+});
+exports.onAuctionCreated = functions.region(regions_1.FIRESTORE_TRIGGER_REGION).firestore
+    .document('auctions/{auctionId}')
+    .onCreate(async (snap, context) => {
+    const auctionId = context.params.auctionId;
+    const data = snap.data();
+    if (!data)
+        return;
+    const status = data.status;
+    if (status !== 'active' && status !== 'upcoming')
+        return;
+    const artistId = data.artistId;
+    if (!artistId)
+        return;
+    const artworkTitle = data.artworkTitle || 'New auction';
+    const artistName = data.artistName || 'An artist';
+    try {
+        await (0, community_announcements_1.postArtistCommunityAnnouncement)(config_1.db, artistId, {
+            event: 'auction_created',
+            title: artworkTitle,
+            body: `${artistName} started a new auction for "${artworkTitle}"`,
+            actionUrl: data.artworkId ? `/artwork/${data.artworkId}` : undefined,
+            auctionId,
+            artworkId: data.artworkId,
+        });
+    }
+    catch (error) {
+        console.error('Error posting community auction announcement', error);
     }
 });
 function parseAuctionEndsAt(endsAt) {

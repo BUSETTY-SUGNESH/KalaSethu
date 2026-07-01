@@ -25,7 +25,10 @@ import { subscribeToChannelTyping } from '@/lib/services/presence-service';
 import MessageList from '@/app/components/messaging/MessageList';
 import MessageComposer from '@/app/components/messaging/MessageComposer';
 import TypingIndicator from '@/app/components/messaging/TypingIndicator';
+import CommunityListItem from '@/app/components/messaging/CommunityListItem';
+import ChatStickyHeader from '@/app/components/messaging/ChatStickyHeader';
 import type { CommunityChannel, CommunityMember, Message, PinnedMessage } from '@/app/types';
+import CollectorSubpageHero from '@/app/components/dashboard/CollectorSubpageHero';
 
 function CommunitiesContent() {
   const searchParams = useSearchParams();
@@ -46,14 +49,22 @@ function CommunitiesContent() {
   const [typingIds, setTypingIds] = useState<string[]>([]);
   const [mobilePanel, setMobilePanel] = useState<'servers' | 'channels' | 'chat'>('servers');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const hasInitializedCommunityRef = useRef(false);
 
+  const communityParam = searchParams.get('community');
   const channelParam = searchParams.get('channel');
 
   useEffect(() => {
-    if (communities.length && !activeCommunityId) {
+    if (!communities.length || hasInitializedCommunityRef.current) return;
+    if (communityParam && communities.some((c) => c.id === communityParam)) {
+      setActiveCommunityId(communityParam);
+      if (channelParam) setMobilePanel('chat');
+      else setMobilePanel('channels');
+    } else {
       setActiveCommunityId(communities[0].id);
     }
-  }, [communities, activeCommunityId]);
+    hasInitializedCommunityRef.current = true;
+  }, [communities, communityParam, channelParam]);
 
   useEffect(() => {
     if (channelParam && activeCommunityId) {
@@ -70,6 +81,11 @@ function CommunitiesContent() {
     myMember?.role === 'owner' ||
     myMember?.role === 'admin' ||
     myMember?.role === 'moderator';
+
+  const communityUnread = (communityId: string) => {
+    const chs = communityChannels[communityId] || [];
+    return chs.reduce((sum, ch) => sum + (ch.unreadCount[user?.id || ''] || 0), 0);
+  };
 
   useEffect(() => {
     if (!activeCommunityId) return;
@@ -119,11 +135,19 @@ function CommunitiesContent() {
   }, [activeCommunityId, activeChannelId, user]);
 
   useEffect(() => {
-    if (channels.length && !activeChannelId) {
+    if (channelParam || !channels.length || activeChannelId) return;
+    const announcements = channels.find((c) => c.isAnnouncements);
+    const isMod =
+      myMember?.role === 'owner' ||
+      myMember?.role === 'admin' ||
+      myMember?.role === 'moderator';
+    if (announcements && !isMod) {
+      setActiveChannelId(announcements.id);
+    } else {
       const def = channels.find((c) => c.isDefault) || channels[0];
       setActiveChannelId(def.id);
     }
-  }, [channels, activeChannelId]);
+  }, [channels, activeChannelId, channelParam, myMember]);
 
   async function handleSend(content: string, reply?: Message | null) {
     if (!user || !activeCommunityId || !activeChannelId) return;
@@ -151,63 +175,63 @@ function CommunitiesContent() {
     }
   }
 
+  function selectChannel(ch: CommunityChannel) {
+    if (!activeCommunityId) return;
+    setActiveChannelId(ch.id);
+    setMobilePanel('chat');
+    router.replace(`/dashboard/communities?community=${activeCommunityId}&channel=${ch.id}`);
+  }
+
   return (
-    <div className="container" style={{ padding: '32px var(--margin-desktop)' }}>
-      <div className="flex justify-between items-center mb-24">
-        <h1 className="text-display-sm text-primary">Communities</h1>
-        <Link href="/dashboard/messages" className="text-body-sm text-primary hover:underline">
-          Direct Messages
-        </Link>
-      </div>
+    <div className="collector-dashboard-page">
+      <CollectorSubpageHero
+        variant="compact"
+        eyebrow="Communities"
+        title="Artist Communities"
+        description="Join channels from verified artists you follow."
+        actions={
+          <Link href="/dashboard/messages" className="text-body-sm text-primary hover:underline">
+            Direct Messages
+          </Link>
+        }
+      />
 
       <div
-        className="communities-layout bg-surface-container-lowest"
+        className="communities-layout dashboard-panel-card messaging-layout"
         style={{
           display: 'grid',
-          gridTemplateColumns: '72px 240px 1fr',
-          height: 'calc(100vh - 200px)',
+          gridTemplateColumns: '72px 260px 1fr',
+          height: 'calc(100vh - 280px)',
           minHeight: 600,
-          borderRadius: 'var(--radius-lg)',
-          border: '1px solid rgba(196, 199, 199, 0.2)',
           overflow: 'hidden',
         }}
       >
-        {/* Server list */}
         <div
-          className={`flex flex-col gap-8 p-8 ${mobilePanel !== 'servers' ? 'mobile-hide' : ''}`}
-          style={{ background: 'var(--color-surface-container)', overflowY: 'auto' }}
+          className={`flex flex-col gap-10 p-10 ${mobilePanel !== 'servers' ? 'mobile-hide' : ''}`}
+          style={{ background: 'var(--color-surface-container)', overflowY: 'auto', alignItems: 'center' }}
         >
           {isLoadingRooms && !communities.length ? (
             <p className="text-caption p-8">Loading...</p>
           ) : (
             communities.map((c) => (
-              <button
+              <CommunityListItem
                 key={c.id}
-                type="button"
-                title={c.name}
-                className="avatar avatar-md mx-auto"
-                style={{
-                  border:
-                    c.id === activeCommunityId
-                      ? '2px solid var(--color-primary)'
-                      : '2px solid transparent',
-                }}
+                community={c}
+                isActive={c.id === activeCommunityId}
+                unreadCount={communityUnread(c.id)}
                 onClick={() => {
                   setActiveCommunityId(c.id);
                   setActiveChannelId(null);
                   setMobilePanel('channels');
+                  router.replace(`/dashboard/communities?community=${c.id}`);
                 }}
-              >
-                {c.name.charAt(0)}
-              </button>
+              />
             ))
           )}
         </div>
 
-        {/* Channel list */}
         <div
-          className={`flex flex-col border-r ${mobilePanel !== 'channels' && mobilePanel !== 'chat' ? 'mobile-hide' : ''}`}
-          style={{ borderRight: '1px solid rgba(196,199,199,0.2)' }}
+          className={`messaging-list-panel ${mobilePanel !== 'channels' && mobilePanel !== 'chat' ? 'mobile-hide' : ''}`}
         >
           {activeCommunity ? (
             <>
@@ -229,17 +253,22 @@ function CommunitiesContent() {
                     <li key={ch.id}>
                       <button
                         type="button"
-                        className={`w-full text-left text-body-sm ${ch.id === activeChannelId ? 'text-primary font-bold' : ''}`}
-                        style={{ padding: '8px 12px', borderRadius: 8 }}
-                        onClick={() => {
-                          setActiveChannelId(ch.id);
-                          setMobilePanel('chat');
-                          router.replace(`/dashboard/communities?community=${activeCommunity.id}&channel=${ch.id}`);
-                        }}
+                        className={`conversation-row w-full text-left ${ch.id === activeChannelId ? 'active' : ''}`}
+                        style={{ minHeight: 48, padding: '10px 14px' }}
+                        onClick={() => selectChannel(ch)}
                       >
-                        <span className="text-on-surface-variant"># </span>
-                        {ch.name}
-                        {unread && <span className="notification-dot ml-8" style={{ display: 'inline-block' }} />}
+                        {ch.isAnnouncements ? (
+                          <Icon name="campaign" size={16} />
+                        ) : (
+                          <span className="text-on-surface-variant">#</span>
+                        )}
+                        <span className={`flex-1 truncate text-body-sm ${unread ? 'font-bold' : ''}`}>
+                          {ch.name}
+                        </span>
+                        {ch.isAnnouncements && !canModerate && (
+                          <span className="text-caption text-on-surface-variant">read-only</span>
+                        )}
+                        {unread && <span className="notification-dot" />}
                       </button>
                     </li>
                   );
@@ -251,72 +280,87 @@ function CommunitiesContent() {
           )}
         </div>
 
-        {/* Chat */}
-        <div className={`flex flex-col ${mobilePanel !== 'chat' ? 'mobile-hide' : ''}`}>
+        <div className={`messaging-chat-panel ${mobilePanel !== 'chat' ? 'mobile-hide' : ''}`}>
           {activeCommunityId && activeChannelId && user ? (
             <>
-              <div style={{ padding: '16px 24px', borderBottom: '1px solid rgba(196,199,199,0.2)' }}>
-                <button type="button" className="btn-ghost mobile-only mb-8" onClick={() => setMobilePanel('channels')}>
-                  <Icon name="arrow_back" size={18} /> Channels
-                </button>
-                <h3 className="text-label-lg">#{activeChannel?.name}</h3>
+              <ChatStickyHeader
+                title={activeCommunity?.name || 'Community'}
+                subtitle={`#${activeChannel?.name || 'channel'}`}
+                avatarUrl={activeCommunity?.avatarUrl}
+                avatarFallback={activeCommunity?.name || 'C'}
+                showBack
+                onBack={() => setMobilePanel('channels')}
+              >
                 {activeChannel?.topic && (
-                  <p className="text-caption text-on-surface-variant">{activeChannel.topic}</p>
+                  <p className="text-caption text-on-surface-variant truncate">{activeChannel.topic}</p>
                 )}
                 {pins.length > 0 && (
-                  <div className="text-caption mt-8" style={{ background: 'var(--color-surface-container-low)', padding: 8, borderRadius: 8 }}>
-                    <Icon name="push_pin" size={14} /> {pins.length} pinned message{pins.length > 1 ? 's' : ''}
+                  <div
+                    className="text-caption mt-4"
+                    style={{
+                      background: 'var(--color-surface-container-low)',
+                      padding: '4px 8px',
+                      borderRadius: 8,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    <Icon name="push_pin" size={14} />
+                    {pins.length} pinned
                   </div>
                 )}
-              </div>
+              </ChatStickyHeader>
 
-              <MessageList
-                messages={messages}
-                currentUserId={user.id}
-                isLoading={isLoadingMessages}
-                hasMore={hasMoreMessages}
-                isLoadingMore={isLoadingOlder}
-                scrollRef={scrollRef}
-                canModerate={canModerate}
-                onReply={setReplyTo}
-                onEdit={async (msg) => {
-                  const next = window.prompt('Edit:', msg.content);
-                  if (!next) return;
-                  await editChannelMessage(activeCommunityId, activeChannelId, msg.id, next);
-                }}
-                onDelete={async (msg) => {
-                  if (!window.confirm('Delete?')) return;
-                  await deleteChannelMessage(activeCommunityId, activeChannelId, msg.id);
-                }}
-                onReact={async (msg, emoji) => {
-                  await toggleChannelReaction(activeCommunityId, activeChannelId, msg.id, emoji);
-                }}
-                onPin={async (msg) => {
-                  await pinChannelMessage(activeCommunityId, activeChannelId, msg.id);
-                  addToast({ type: 'success', title: 'Message pinned' });
-                }}
-                onLoadMore={async () => {
-                  if (!messages.length) return;
-                  const before = await getChannelMessageSnapshot(
-                    activeCommunityId,
-                    activeChannelId,
-                    messages[0].id
-                  );
-                  if (!before) return;
-                  setIsLoadingOlder(true);
-                  try {
-                    const result = await getOlderChannelMessages(
+              <div className="chat-wallpaper flex flex-col flex-1 min-h-0">
+                <MessageList
+                  messages={messages}
+                  currentUserId={user.id}
+                  isLoading={isLoadingMessages}
+                  hasMore={hasMoreMessages}
+                  isLoadingMore={isLoadingOlder}
+                  scrollRef={scrollRef}
+                  canModerate={canModerate}
+                  onReply={setReplyTo}
+                  onEdit={async (msg) => {
+                    const next = window.prompt('Edit:', msg.content);
+                    if (!next) return;
+                    await editChannelMessage(activeCommunityId, activeChannelId, msg.id, next);
+                  }}
+                  onDelete={async (msg) => {
+                    if (!window.confirm('Delete?')) return;
+                    await deleteChannelMessage(activeCommunityId, activeChannelId, msg.id);
+                  }}
+                  onReact={async (msg, emoji) => {
+                    await toggleChannelReaction(activeCommunityId, activeChannelId, msg.id, emoji);
+                  }}
+                  onPin={async (msg) => {
+                    await pinChannelMessage(activeCommunityId, activeChannelId, msg.id);
+                    addToast({ type: 'success', title: 'Message pinned' });
+                  }}
+                  onLoadMore={async () => {
+                    if (!messages.length) return;
+                    const before = await getChannelMessageSnapshot(
                       activeCommunityId,
                       activeChannelId,
-                      before
+                      messages[0].id
                     );
-                    if (result.data.length) setMessages((prev) => [...result.data, ...prev]);
-                    setHasMoreMessages(result.hasMore);
-                  } finally {
-                    setIsLoadingOlder(false);
-                  }
-                }}
-              />
+                    if (!before) return;
+                    setIsLoadingOlder(true);
+                    try {
+                      const result = await getOlderChannelMessages(
+                        activeCommunityId,
+                        activeChannelId,
+                        before
+                      );
+                      if (result.data.length) setMessages((prev) => [...result.data, ...prev]);
+                      setHasMoreMessages(result.hasMore);
+                    } finally {
+                      setIsLoadingOlder(false);
+                    }
+                  }}
+                />
+              </div>
 
               <TypingIndicator
                 names={typingIds.map(
@@ -368,7 +412,14 @@ function CommunitiesContent() {
 
 export default function CommunitiesPage() {
   return (
-    <Suspense fallback={<div className="container p-48">Loading communities...</div>}>
+    <Suspense
+      fallback={
+        <div className="collector-dashboard-page">
+          <div className="skeleton dashboard-sub-hero" style={{ height: 80, marginBottom: 24 }} />
+          <div className="skeleton dashboard-panel-card" style={{ height: 500 }} />
+        </div>
+      }
+    >
       <CommunitiesContent />
     </Suspense>
   );

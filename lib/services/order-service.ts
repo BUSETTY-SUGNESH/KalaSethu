@@ -3,6 +3,7 @@
 // Business logic layer bridging UI to Repository layer.
 // ============================================================
 import { orderRepository } from '@/lib/repositories';
+import { isValidQueryString } from '@/lib/firebase/query-guards';
 import type {
   Order,
   OrderStatus,
@@ -22,6 +23,9 @@ export async function getBuyerOrders(
   pageSize: number = 20,
   lastDoc?: DocumentSnapshot | null
 ): Promise<PaginatedResult<Order>> {
+  if (!isValidQueryString(buyerId)) {
+    return { data: [], lastDoc: null, hasMore: false };
+  }
   return orderRepository.findByBuyer(buyerId, pageSize, lastDoc);
 }
 
@@ -31,6 +35,9 @@ export async function getSellerOrders(
   pageSize: number = 20,
   lastDoc?: DocumentSnapshot | null
 ): Promise<PaginatedResult<Order>> {
+  if (!isValidQueryString(sellerId)) {
+    return { data: [], lastDoc: null, hasMore: false };
+  }
   return orderRepository.findBySeller(sellerId, pageSize, lastDoc);
 }
 

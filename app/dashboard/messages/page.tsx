@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Icon from '@/app/components/ui/Icon';
@@ -30,10 +30,26 @@ import { resolveDisplayName, getCallableErrorMessage } from '@/lib/utils/display
 import MessageList from '@/app/components/messaging/MessageList';
 import MessageComposer from '@/app/components/messaging/MessageComposer';
 import TypingIndicator from '@/app/components/messaging/TypingIndicator';
-import PresenceBadge from '@/app/components/messaging/PresenceBadge';
+import ConversationListItem from '@/app/components/messaging/ConversationListItem';
+import ChatStickyHeader from '@/app/components/messaging/ChatStickyHeader';
+import ChatHeaderContextMenu, {
+  type ChatHeaderMenuSection,
+} from '@/app/components/messaging/ChatHeaderContextMenu';
+import ChatSearchPanel from '@/app/components/messaging/ChatSearchPanel';
+import ChatMediaPanel from '@/app/components/messaging/ChatMediaPanel';
+import {
+  getChatClearedAt,
+  isRoomMuted,
+  isRoomPinned,
+  toggleRoomMuted,
+  toggleRoomPinned,
+  clearChatForUser,
+  blockUser,
+  sortRoomsByPin,
+} from '@/lib/utils/chat-preferences';
 import type { ChatRoom, Message, User } from '@/app/types';
 import type { PresenceStatus } from '@/lib/services/presence-service';
-import { format } from 'date-fns';
+import CollectorSubpageHero from '@/app/components/dashboard/CollectorSubpageHero';
 
 const ROOM_PAGE_SIZE = 30;
 const MESSAGE_PAGE_SIZE = 50;
@@ -55,15 +71,19 @@ function MessagesContent() {
   const [isLoadingMoreRooms, setIsLoadingMoreRooms] = useState(false);
   const [hasMoreRooms, setHasMoreRooms] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [chatSearchOpen, setChatSearchOpen] = useState(false);
+  const [chatMediaOpen, setChatMediaOpen] = useState(false);
+  const [prefsTick, setPrefsTick] = useState(0);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
   const [presenceStatus, setPresenceStatus] = useState<PresenceStatus>('offline');
   const [participantProfiles, setParticipantProfiles] = useState<Record<string, Partial<User>>>({});
+  const [mobilePanel, setMobilePanel] = useState<'list' | 'chat'>('list');
 
   const loadedProfileIdsRef = useRef<Set<string>>(new Set());
   const hasInitializedRoomRef = useRef(false);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setLocalRooms((prev) => {
@@ -88,7 +108,11 @@ function MessagesContent() {
       if (profile) {
         setParticipantProfiles((prev) => ({
           ...prev,
-          [id]: { displayName: profile.displayName, avatarUrl: profile.avatarUrl },
+          [id]: {
+            displayName: profile.displayName,
+            avatarUrl: profile.avatarUrl,
+            role: profile.role,
+          },
         }));
       }
     } catch {
@@ -113,10 +137,12 @@ function MessagesContent() {
       const existing = localRooms.find((r) => r.participants.includes(targetUserId));
       if (existing) {
         setActiveRoomId(existing.id);
+        setMobilePanel('chat');
         hasInitializedRoomRef.current = true;
       } else if (!isLoadingRooms) {
         void fetchParticipantProfile(targetUserId).then(() => {
           setActiveRoomId('new_chat');
+          setMobilePanel('chat');
           hasInitializedRoomRef.current = true;
         });
       }
@@ -135,6 +161,17 @@ function MessagesContent() {
       ? targetUserId
       : null;
   const activeOtherProfile = activeOtherId ? participantProfiles[activeOtherId] : null;
+  const activeDisplayName =
+    activeOtherProfile?.displayName ||
+    (activeOtherId && activeRoom?.participantNames[activeOtherId]) ||
+    'Chat';
+
+  const presenceSubtitle =
+    typingUserIds.length > 0
+      ? 'typing…'
+      : presenceStatus === 'online'
+        ? 'Online'
+        : 'Offline';
 
   useEffect(() => {
     const roomId = activeRoomId;
@@ -213,14 +250,10 @@ function MessagesContent() {
   }, [activeOtherId]);
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
-        setIsMoreMenuOpen(false);
-      }
-    }
-    if (isMoreMenuOpen) document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isMoreMenuOpen]);
+    setChatSearchOpen(false);
+    setChatMediaOpen(false);
+    setIsMoreMenuOpen(false);
+  }, [activeRoomId]);
 
   async function handleSend(content: string, reply?: Message | null) {
     if (!user) return;
@@ -284,38 +317,240 @@ function MessagesContent() {
     }
   }
 
-  const filteredRooms = localRooms.filter((room) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    const otherId = getOtherId(room);
-    const name = (
-      otherId
-        ? participantProfiles[otherId]?.displayName ?? room.participantNames[otherId]
-        : ''
-    ).toLowerCase();
-    return name.includes(q) || (room.lastMessage ?? '').toLowerCase().includes(q);
-  });
+  const filteredRooms = useMemo(() => {
+    const list = localRooms.filter((room) => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      const otherId = getOtherId(room);
+      const name = (
+        otherId
+          ? participantProfiles[otherId]?.displayName ?? room.participantNames[otherId]
+          : ''
+      ).toLowerCase();
+      return name.includes(q) || (room.lastMessage ?? '').toLowerCase().includes(q);
+    });
+    return user ? sortRoomsByPin(user.id, list) : list;
+  }, [localRooms, searchQuery, participantProfiles, user, prefsTick]);
+
+  const clearedAt =
+    user && activeRoomId && activeRoomId !== 'new_chat'
+      ? getChatClearedAt(user.id, activeRoomId)
+      : null;
+
+  const visibleMessages = useMemo(() => {
+    if (!clearedAt) return messages;
+    const cutoff = new Date(clearedAt).getTime();
+    return messages.filter((m) => new Date(m.createdAt).getTime() > cutoff);
+  }, [messages, clearedAt]);
+
+  const roomMuted =
+    user && activeRoomId && activeRoomId !== 'new_chat'
+      ? isRoomMuted(user.id, activeRoomId)
+      : false;
+
+  const roomPinned =
+    user && activeRoomId && activeRoomId !== 'new_chat'
+      ? isRoomPinned(user.id, activeRoomId)
+      : false;
+
+  const isOtherArtist =
+    activeOtherProfile?.role === 'artist' ||
+    activeOtherProfile?.role === 'verified_artist';
+
+  const headerMenuSections: ChatHeaderMenuSection[] = useMemo(() => {
+    if (!activeOtherId) return [];
+    const profileSection: ChatHeaderMenuSection = {
+      id: 'profile',
+      items: [
+        {
+          id: 'view-profile',
+          label: 'View Profile',
+          icon: 'person',
+          href: `/profile/${activeOtherId}`,
+        },
+        ...(isOtherArtist
+          ? [
+              {
+                id: 'view-artist-profile',
+                label: 'View Artist Profile',
+                icon: 'palette',
+                href: `/profile/${activeOtherId}`,
+              },
+            ]
+          : []),
+      ],
+    };
+
+    const chatSection: ChatHeaderMenuSection = {
+      id: 'chat',
+      items: [
+        {
+          id: 'search',
+          label: 'Search in Chat',
+          icon: 'search',
+          onClick: () => setChatSearchOpen(true),
+          disabled: activeRoomId === 'new_chat',
+        },
+        {
+          id: 'media',
+          label: 'Media & Files',
+          icon: 'perm_media',
+          onClick: () => setChatMediaOpen(true),
+          disabled: activeRoomId === 'new_chat',
+        },
+      ],
+    };
+
+    const settingsSection: ChatHeaderMenuSection = {
+      id: 'settings',
+      items: [
+        {
+          id: 'mute',
+          label: roomMuted ? 'Unmute Notifications' : 'Mute Notifications',
+          icon: roomMuted ? 'notifications' : 'notifications_off',
+          active: roomMuted,
+          onClick: () => {
+            if (!user || !activeRoomId || activeRoomId === 'new_chat') return;
+            const nowMuted = toggleRoomMuted(user.id, activeRoomId);
+            setPrefsTick((t) => t + 1);
+            addToast({
+              type: 'info',
+              title: nowMuted ? 'Notifications muted' : 'Notifications unmuted',
+            });
+          },
+          disabled: activeRoomId === 'new_chat',
+        },
+        {
+          id: 'pin',
+          label: roomPinned ? 'Unpin Conversation' : 'Pin Conversation',
+          icon: 'push_pin',
+          active: roomPinned,
+          onClick: () => {
+            if (!user || !activeRoomId || activeRoomId === 'new_chat') return;
+            const nowPinned = toggleRoomPinned(user.id, activeRoomId);
+            setPrefsTick((t) => t + 1);
+            addToast({
+              type: 'success',
+              title: nowPinned ? 'Conversation pinned' : 'Conversation unpinned',
+            });
+          },
+          disabled: activeRoomId === 'new_chat',
+        },
+      ],
+    };
+
+    const dangerSection: ChatHeaderMenuSection = {
+      id: 'danger',
+      destructive: true,
+      items: [
+        {
+          id: 'clear',
+          label: 'Clear Chat',
+          icon: 'delete_sweep',
+          destructive: true,
+          onClick: () => {
+            if (!user || !activeRoomId || activeRoomId === 'new_chat') return;
+            if (
+              !window.confirm(
+                'Clear this chat from your view? Messages will be hidden for you only.'
+              )
+            ) {
+              return;
+            }
+            clearChatForUser(user.id, activeRoomId);
+            setPrefsTick((t) => t + 1);
+            addToast({ type: 'success', title: 'Chat cleared on your device' });
+          },
+          disabled: activeRoomId === 'new_chat',
+        },
+        {
+          id: 'block',
+          label: 'Block User',
+          icon: 'block',
+          destructive: true,
+          onClick: () => {
+            if (!user || !activeOtherId) return;
+            if (
+              !window.confirm(
+                `Block ${activeDisplayName}? You will no longer see messages from them.`
+              )
+            ) {
+              return;
+            }
+            blockUser(user.id, activeOtherId);
+            setPrefsTick((t) => t + 1);
+            setActiveRoomId(null);
+            setMobilePanel('list');
+            addToast({ type: 'success', title: 'User blocked' });
+          },
+        },
+        {
+          id: 'report',
+          label: 'Report User',
+          icon: 'flag',
+          destructive: true,
+          onClick: async () => {
+            const desc = window.prompt('Describe the issue:');
+            if (!desc || !user) return;
+            await createReport({
+              reporterId: user.id,
+              reporterName: user.displayName,
+              targetId: activeOtherId,
+              targetType: 'user',
+              reason: 'harassment',
+              description: desc,
+            });
+            addToast({ type: 'success', title: 'Report submitted' });
+          },
+        },
+      ],
+    };
+
+    return [profileSection, chatSection, settingsSection, dangerSection];
+  }, [
+    activeOtherId,
+    activeRoomId,
+    activeDisplayName,
+    isOtherArtist,
+    roomMuted,
+    roomPinned,
+    user,
+    addToast,
+  ]);
 
   const otherParticipantIds =
     activeRoom?.participants.filter((id) => id !== user?.id) ?? [];
 
+  function selectRoom(roomId: string) {
+    setActiveRoomId(roomId);
+    setMobilePanel('chat');
+  }
+
   return (
-    <div className="container" style={{ padding: '32px var(--margin-desktop)' }}>
-      <h1 className="text-display-sm text-primary mb-24">Messages</h1>
+    <div className="collector-dashboard-page">
+      <CollectorSubpageHero
+        variant="compact"
+        eyebrow="Messages"
+        title="Direct Messages"
+        description="Chat with artists and collectors you follow."
+        actions={
+          <Link href="/dashboard/communities" className="text-body-sm text-primary hover:underline">
+            Communities
+          </Link>
+        }
+      />
       <div
-        className="bg-surface-container-lowest messaging-layout"
+        className="bg-surface-container-lowest messaging-layout dashboard-panel-card"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(280px, 350px) 1fr',
-          height: 'calc(100vh - 200px)',
+          gridTemplateColumns: 'minmax(320px, 380px) 1fr',
+          height: 'calc(100vh - 280px)',
           minHeight: 600,
-          borderRadius: 'var(--radius-lg)',
-          border: '1px solid rgba(196, 199, 199, 0.2)',
           overflow: 'hidden',
         }}
       >
-        <div className="flex flex-col border-r" style={{ borderRight: '1px solid rgba(196,199,199,0.2)' }}>
-          <div style={{ padding: 24, borderBottom: '1px solid rgba(196,199,199,0.2)' }}>
+        <div className={`messaging-list-panel ${mobilePanel !== 'list' ? 'mobile-hide' : ''}`}>
+          <div style={{ padding: 20, borderBottom: '1px solid rgba(196,199,199,0.2)' }}>
             <div className="header-search" style={{ margin: 0, width: '100%' }}>
               <Icon name="search" size={20} />
               <input
@@ -330,61 +565,57 @@ function MessagesContent() {
             {isLoadingRooms ? (
               <p className="p-24 text-on-surface-variant">Loading...</p>
             ) : (
-              <ul className="flex flex-col">
+              <div className="flex flex-col">
                 {filteredRooms.map((room) => {
                   const otherId = getOtherId(room);
                   const profile = otherId ? participantProfiles[otherId] : null;
-                  const hasUnread =
-                    (room.unreadCount[user?.id || ''] || 0) > 0 &&
-                    room.lastMessageBy !== user?.id;
+                  const displayName =
+                    profile?.displayName || room.participantNames[otherId ?? ''] || 'User';
+                  const unreadCount = room.unreadCount[user?.id || ''] || 0;
+                  const hasUnread = unreadCount > 0 && room.lastMessageBy !== user?.id;
+                  const preview = room.lastMessage
+                    ? `${room.lastMessageBy === user?.id ? 'You: ' : ''}${room.lastMessage}`
+                    : undefined;
+
                   return (
-                    <li
+                    <ConversationListItem
                       key={room.id}
-                      onClick={() => setActiveRoomId(room.id)}
-                      className={`flex gap-16 items-center cursor-pointer ${room.id === activeRoomId ? 'bg-surface-container-low' : ''}`}
-                      style={{ padding: '16px 24px', borderLeft: room.id === activeRoomId ? '3px solid var(--color-primary)' : '3px solid transparent' }}
-                    >
-                      <div className="avatar avatar-md">{profile?.displayName?.charAt(0) || 'U'}</div>
-                      <div className="flex-1 overflow-hidden">
-                        <div className="flex justify-between">
-                          <span className={`truncate ${hasUnread ? 'font-bold' : ''}`}>
-                            {profile?.displayName || room.participantNames[otherId ?? ''] || 'User'}
-                          </span>
-                          {room.lastMessageAt && (
-                            <span className="text-caption">{format(new Date(room.lastMessageAt), 'MMM d')}</span>
-                          )}
-                        </div>
-                        {room.lastMessage && (
-                          <span className="text-body-sm truncate text-on-surface-variant block">
-                            {room.lastMessageBy === user?.id ? 'You: ' : ''}
-                            {room.lastMessage}
-                          </span>
-                        )}
-                      </div>
-                      {hasUnread && <div className="notification-dot" />}
-                    </li>
+                      id={room.id}
+                      displayName={displayName}
+                      avatarUrl={profile?.avatarUrl}
+                      preview={preview}
+                      lastMessageAt={room.lastMessageAt}
+                      isActive={room.id === activeRoomId}
+                      hasUnread={hasUnread}
+                      unreadCount={unreadCount}
+                      onClick={() => selectRoom(room.id)}
+                    />
                   );
                 })}
-              </ul>
+              </div>
             )}
             {hasMoreRooms && (
               <div className="p-16 text-center">
-                <button type="button" className="text-primary text-body-sm" onClick={async () => {
-                  if (!user || !localRooms.length) return;
-                  setIsLoadingMoreRooms(true);
-                  try {
-                    const lastDoc = await getRoomSnapshot(localRooms[localRooms.length - 1].id);
-                    if (!lastDoc) return;
-                    const result = await loadMoreRooms(user.id, lastDoc, ROOM_PAGE_SIZE);
-                    setLocalRooms((prev) => {
-                      const ids = new Set(prev.map((r) => r.id));
-                      return [...prev, ...result.data.filter((r) => !ids.has(r.id))];
-                    });
-                    setHasMoreRooms(result.hasMore);
-                  } finally {
-                    setIsLoadingMoreRooms(false);
-                  }
-                }}>
+                <button
+                  type="button"
+                  className="text-primary text-body-sm"
+                  onClick={async () => {
+                    if (!user || !localRooms.length) return;
+                    setIsLoadingMoreRooms(true);
+                    try {
+                      const lastDoc = await getRoomSnapshot(localRooms[localRooms.length - 1].id);
+                      if (!lastDoc) return;
+                      const result = await loadMoreRooms(user.id, lastDoc, ROOM_PAGE_SIZE);
+                      setLocalRooms((prev) => {
+                        const ids = new Set(prev.map((r) => r.id));
+                        return [...prev, ...result.data.filter((r) => !ids.has(r.id))];
+                      });
+                      setHasMoreRooms(result.hasMore);
+                    } finally {
+                      setIsLoadingMoreRooms(false);
+                    }
+                  }}
+                >
                   {isLoadingMoreRooms ? 'Loading...' : 'Load more'}
                 </button>
               </div>
@@ -392,77 +623,88 @@ function MessagesContent() {
           </div>
         </div>
 
-        <div className="flex flex-col h-full bg-surface">
+        <div className={`messaging-chat-panel ${mobilePanel !== 'chat' ? 'mobile-hide' : ''}`}>
           {activeRoomId ? (
             <>
-              <div className="flex items-center justify-between" style={{ padding: '20px 24px', borderBottom: '1px solid rgba(196,199,199,0.2)' }}>
-                <div className="flex items-center gap-12">
-                  <div style={{ position: 'relative' }}>
-                    <div className="avatar avatar-sm">{activeOtherProfile?.displayName?.charAt(0) || 'U'}</div>
-                    {activeOtherId && (
-                      <span style={{ position: 'absolute', bottom: 0, right: 0 }}>
-                        <PresenceBadge status={presenceStatus} size={8} />
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="text-label-lg">{activeOtherProfile?.displayName || 'Chat'}</h3>
-                    {activeOtherId && (
-                      <Link href={`/profile/${activeOtherId}`} className="text-caption hover:underline">
-                        View Profile
-                      </Link>
-                    )}
-                  </div>
-                </div>
-                <div ref={moreMenuRef} style={{ position: 'relative' }}>
-                  <button type="button" className="btn-ghost" onClick={() => setIsMoreMenuOpen((o) => !o)}>
-                    <Icon name="more_vert" />
-                  </button>
-                  {isMoreMenuOpen && activeOtherId && (
-                    <div className="bg-surface-container-lowest" style={{ position: 'absolute', right: 0, top: '100%', minWidth: 160, border: '1px solid rgba(196,199,199,0.2)', borderRadius: 8, zIndex: 10 }}>
-                      <Link href={`/profile/${activeOtherId}`} style={{ display: 'block', padding: 12 }} onClick={() => setIsMoreMenuOpen(false)}>View profile</Link>
-                      <button type="button" style={{ display: 'block', width: '100%', padding: 12, textAlign: 'left' }} onClick={async () => {
-                        const desc = window.prompt('Describe the issue:');
-                        if (!desc || !user) return;
-                        await createReport({ reporterId: user.id, reporterName: user.displayName, targetId: activeOtherId, targetType: 'user', reason: 'harassment', description: desc });
-                        addToast({ type: 'success', title: 'Report submitted' });
-                        setIsMoreMenuOpen(false);
-                      }}>Report user</button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <MessageList
-                messages={messages}
-                currentUserId={user?.id || ''}
-                isLoading={isLoadingMessages}
-                hasMore={hasMoreMessages}
-                isLoadingMore={isLoadingOlderMessages}
-                onLoadMore={handleLoadOlder}
-                scrollRef={messagesScrollRef}
-                otherParticipantIds={otherParticipantIds}
-                onReply={setReplyTo}
-                onEdit={async (msg) => {
-                  const next = window.prompt('Edit message:', msg.content);
-                  if (!next || !activeRoomId) return;
-                  await editDmMessage(activeRoomId, msg.id, next);
-                }}
-                onDelete={async (msg) => {
-                  if (!activeRoomId || !window.confirm('Delete message?')) return;
-                  await deleteDmMessage(activeRoomId, msg.id);
-                }}
-                onReact={async (msg, emoji) => {
-                  if (!activeRoomId) return;
-                  await toggleDmReaction(activeRoomId, msg.id, emoji);
-                }}
-                emptyState={
-                  <div className="text-center">
-                    <Icon name="waving_hand" size={32} />
-                    <p>Say hello to {activeOtherProfile?.displayName || 'them'}!</p>
-                  </div>
+              <ChatStickyHeader
+                title={activeDisplayName}
+                subtitle={presenceSubtitle}
+                avatarUrl={activeOtherProfile?.avatarUrl}
+                avatarFallback={activeDisplayName}
+                presenceStatus={presenceStatus}
+                showBack
+                onBack={() => setMobilePanel('list')}
+                actions={
+                  activeOtherId ? (
+                    <>
+                      <button
+                        ref={menuTriggerRef}
+                        type="button"
+                        className="chat-header-menu-trigger"
+                        onClick={() => setIsMoreMenuOpen((o) => !o)}
+                        aria-label="Chat options"
+                        aria-expanded={isMoreMenuOpen}
+                        aria-haspopup="menu"
+                      >
+                        <Icon name="more_vert" />
+                      </button>
+                      <ChatHeaderContextMenu
+                        isOpen={isMoreMenuOpen}
+                        onClose={() => setIsMoreMenuOpen(false)}
+                        triggerRef={menuTriggerRef}
+                        sections={headerMenuSections}
+                      />
+                    </>
+                  ) : undefined
                 }
               />
+
+              {chatSearchOpen && activeRoomId && activeRoomId !== 'new_chat' && (
+                <ChatSearchPanel
+                  roomId={activeRoomId}
+                  onClose={() => setChatSearchOpen(false)}
+                />
+              )}
+
+              {chatMediaOpen && (
+                <ChatMediaPanel
+                  messages={visibleMessages}
+                  onClose={() => setChatMediaOpen(false)}
+                />
+              )}
+
+              <div className="chat-wallpaper flex flex-col flex-1 min-h-0">
+                <MessageList
+                  messages={visibleMessages}
+                  currentUserId={user?.id || ''}
+                  isLoading={isLoadingMessages}
+                  hasMore={hasMoreMessages}
+                  isLoadingMore={isLoadingOlderMessages}
+                  onLoadMore={handleLoadOlder}
+                  scrollRef={messagesScrollRef}
+                  otherParticipantIds={otherParticipantIds}
+                  onReply={setReplyTo}
+                  onEdit={async (msg) => {
+                    const next = window.prompt('Edit message:', msg.content);
+                    if (!next || !activeRoomId) return;
+                    await editDmMessage(activeRoomId, msg.id, next);
+                  }}
+                  onDelete={async (msg) => {
+                    if (!activeRoomId || !window.confirm('Delete message?')) return;
+                    await deleteDmMessage(activeRoomId, msg.id);
+                  }}
+                  onReact={async (msg, emoji) => {
+                    if (!activeRoomId) return;
+                    await toggleDmReaction(activeRoomId, msg.id, emoji);
+                  }}
+                  emptyState={
+                    <div className="text-center">
+                      <Icon name="waving_hand" size={32} />
+                      <p>Say hello to {activeDisplayName}!</p>
+                    </div>
+                  }
+                />
+              </div>
 
               <TypingIndicator
                 names={typingUserIds.map(
@@ -471,6 +713,7 @@ function MessagesContent() {
               />
 
               <MessageComposer
+                variant="dm"
                 onSend={handleSend}
                 replyTo={replyTo}
                 onCancelReply={() => setReplyTo(null)}
@@ -494,7 +737,14 @@ function MessagesContent() {
 
 export default function MessagesPage() {
   return (
-    <Suspense fallback={<div className="container p-48">Loading messages...</div>}>
+    <Suspense
+      fallback={
+        <div className="collector-dashboard-page">
+          <div className="skeleton dashboard-sub-hero" style={{ height: 80, marginBottom: 24 }} />
+          <div className="skeleton dashboard-panel-card" style={{ height: 500 }} />
+        </div>
+      }
+    >
       <MessagesContent />
     </Suspense>
   );

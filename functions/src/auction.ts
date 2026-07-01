@@ -16,6 +16,8 @@ import {
   getUniqueBidderIds,
 } from './notification-helpers';
 import { ChunkedBatchWriter } from './utils/batch-commit';
+import { FIRESTORE_TRIGGER_REGION } from './constants/regions';
+import { postArtistCommunityAnnouncement } from './utils/community-announcements';
 
 // ─────────────────────────────────────────────────────────────
 // placeBid — Secure callable function to place bids
@@ -776,6 +778,36 @@ export const getUserBidAnalytics = functions.region('asia-south1').https.onCall(
     throw new functions.https.HttpsError('internal', 'Unable to calculate analytics.');
   }
 });
+
+export const onAuctionCreated = functions.region(FIRESTORE_TRIGGER_REGION).firestore
+  .document('auctions/{auctionId}')
+  .onCreate(async (snap, context) => {
+    const auctionId = context.params.auctionId as string;
+    const data = snap.data();
+    if (!data) return;
+
+    const status = data.status as string | undefined;
+    if (status !== 'active' && status !== 'upcoming') return;
+
+    const artistId = data.artistId as string | undefined;
+    if (!artistId) return;
+
+    const artworkTitle = (data.artworkTitle as string) || 'New auction';
+    const artistName = (data.artistName as string) || 'An artist';
+
+    try {
+      await postArtistCommunityAnnouncement(db, artistId, {
+        event: 'auction_created',
+        title: artworkTitle,
+        body: `${artistName} started a new auction for "${artworkTitle}"`,
+        actionUrl: data.artworkId ? `/artwork/${data.artworkId as string}` : undefined,
+        auctionId,
+        artworkId: data.artworkId as string | undefined,
+      });
+    } catch (error) {
+      console.error('Error posting community auction announcement', error);
+    }
+  });
 
 function parseAuctionEndsAt(endsAt: unknown): number {
   if (!endsAt) return 0;

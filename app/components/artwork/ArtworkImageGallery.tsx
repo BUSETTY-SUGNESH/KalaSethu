@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
+import Icon from '@/app/components/ui/Icon';
+import ArtworkLightbox from '@/app/components/artwork/ArtworkLightbox';
 import { ARTWORK_PLACEHOLDER } from '@/lib/constants/placeholders';
 
 interface GalleryImage {
@@ -15,12 +17,16 @@ interface ArtworkImageGalleryProps {
 
 export default function ArtworkImageGallery({ title, images }: ArtworkImageGalleryProps) {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const galleryImages = images.length > 0 ? images : [{ url: ARTWORK_PLACEHOLDER }];
 
   return (
     <div className="flex flex-col gap-16">
-      <div
-        className="bg-surface-container-low"
+      <button
+        type="button"
+        className="artwork-gallery-main bg-surface-container-low"
+        onClick={() => setLightboxOpen(true)}
+        aria-label={`View full size image of ${title}`}
         style={{
           position: 'relative',
           width: '100%',
@@ -28,6 +34,8 @@ export default function ArtworkImageGallery({ title, images }: ArtworkImageGalle
           borderRadius: 'var(--radius-md)',
           overflow: 'hidden',
           border: '1px solid rgba(196, 199, 199, 0.2)',
+          padding: 0,
+          cursor: 'zoom-in',
         }}
       >
         <Image
@@ -39,7 +47,10 @@ export default function ArtworkImageGallery({ title, images }: ArtworkImageGalle
           priority
           style={{ objectFit: 'cover' }}
         />
-      </div>
+        <span className="artwork-gallery-main__hint" aria-hidden="true">
+          <Icon name="zoom_in" size={20} />
+        </span>
+      </button>
       {galleryImages.length > 1 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
           {galleryImages.map((img, idx) => (
@@ -73,6 +84,14 @@ export default function ArtworkImageGallery({ title, images }: ArtworkImageGalle
           ))}
         </div>
       )}
+      <ArtworkLightbox
+        open={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+        images={galleryImages}
+        initialIndex={activeImageIndex}
+        title={title}
+        onIndexChange={setActiveImageIndex}
+      />
     </div>
   );
 }

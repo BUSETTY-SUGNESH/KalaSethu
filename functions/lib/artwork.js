@@ -44,6 +44,7 @@ const rate_limit_1 = require("./utils/rate-limit");
 const feature_flags_1 = require("./utils/feature-flags");
 const batch_commit_1 = require("./utils/batch-commit");
 const regions_1 = require("./constants/regions");
+const community_announcements_1 = require("./utils/community-announcements");
 function isKeywordMaintenanceWrite(prevData, data) {
     if (!prevData || !data)
         return false;
@@ -159,6 +160,18 @@ exports.onArtworkWritten = functions.region(regions_1.FIRESTORE_TRIGGER_REGION).
         }
         catch (error) {
             console.error("Error processing artwork publication notifications", error);
+        }
+        try {
+            await (0, community_announcements_1.postArtistCommunityAnnouncement)(config_1.db, artistId, {
+                event: 'artwork_published',
+                title: data?.title || 'New artwork',
+                body: `${data?.artistName || 'An artist'} published a new artwork: "${data?.title || 'Untitled'}"`,
+                actionUrl: `/artwork/${artworkId}`,
+                artworkId,
+            });
+        }
+        catch (error) {
+            console.error('Error posting community artwork announcement', error);
         }
     }
 });

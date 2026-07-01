@@ -24,6 +24,7 @@ interface MessageComposerProps {
     channelId: string;
     userId: string;
   };
+  variant?: 'default' | 'dm';
 }
 
 export default function MessageComposer({
@@ -34,11 +35,13 @@ export default function MessageComposer({
   onCancelReply,
   mentionSuggestions = [],
   typingContext,
+  variant = 'default',
 }: MessageComposerProps) {
   const [content, setContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showMentions, setShowMentions] = useState(false);
+  const [toolbarExpanded, setToolbarExpanded] = useState(variant !== 'dm');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -112,7 +115,10 @@ export default function MessageComposer({
   }
 
   return (
-    <div className="chat-input-area flex-col" style={{ gap: 8 }}>
+    <div
+      className={`chat-input-area flex-col ${variant === 'dm' ? 'composer-minimal' : ''} ${toolbarExpanded ? 'composer-expanded' : ''}`}
+      style={{ gap: 8 }}
+    >
       {replyTo && (
         <div
           className="flex justify-between items-center w-full text-caption"
@@ -130,6 +136,18 @@ export default function MessageComposer({
       )}
 
       <div className="flex gap-4 items-center w-full flex-wrap">
+        {variant === 'dm' && (
+          <button
+            type="button"
+            className={`btn-ghost ${toolbarExpanded ? 'text-primary' : ''}`}
+            title="Formatting"
+            onClick={() => setToolbarExpanded((e) => !e)}
+            aria-expanded={toolbarExpanded}
+          >
+            <Icon name="format_size" size={18} />
+          </button>
+        )}
+        <div className="composer-toolbar">
         <button type="button" className="btn-ghost" title="Bold" onClick={() => wrapSelection('**')}>
           <Icon name="format_bold" size={18} />
         </button>
@@ -158,6 +176,7 @@ export default function MessageComposer({
         >
           <Icon name="visibility" size={18} />
         </button>
+        </div>
       </div>
 
       {showMentions && mentionSuggestions.length > 0 && (

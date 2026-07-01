@@ -13,6 +13,7 @@ import {
   paginatedQuery,
   type DocumentSnapshot,
 } from '@/lib/firebase/firestore';
+import { emptyPaginatedResult, isValidQueryString } from '@/lib/firebase/query-guards';
 import type { Order, OrderStatus, PaginatedResult } from '@/app/types';
 
 export const orderRepository = {
@@ -39,6 +40,7 @@ export const orderRepository = {
     pageSize: number = 20,
     lastDoc?: DocumentSnapshot | null
   ): Promise<PaginatedResult<Order>> {
+    if (!isValidQueryString(buyerId)) return emptyPaginatedResult<Order>();
     return paginatedQuery<Order>(
       collections.orders(),
       [where('buyerId', '==', buyerId), orderBy('createdAt', 'desc')],
@@ -52,6 +54,7 @@ export const orderRepository = {
     pageSize: number = 20,
     lastDoc?: DocumentSnapshot | null
   ): Promise<PaginatedResult<Order>> {
+    if (!isValidQueryString(sellerId)) return emptyPaginatedResult<Order>();
     return paginatedQuery<Order>(
       collections.orders(),
       [where('sellerId', '==', sellerId), orderBy('createdAt', 'desc')],

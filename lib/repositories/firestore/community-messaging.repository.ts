@@ -20,6 +20,7 @@ import {
   type PaginatedResult,
   type DocumentSnapshot,
 } from '@/lib/firebase/firestore';
+import { isValidQueryString } from '@/lib/firebase/query-guards';
 import { functions } from '@/lib/firebase/config';
 import { httpsCallable } from 'firebase/functions';
 import type {
@@ -52,6 +53,7 @@ export const communityMessagingRepository = {
   },
 
   async getCommunityByOwner(ownerId: string): Promise<Community | null> {
+    if (!isValidQueryString(ownerId)) return null;
     const q = query(
       collections.communities(),
       where('ownerId', '==', ownerId),
@@ -63,11 +65,35 @@ export const communityMessagingRepository = {
     return { id: d.id, ...d.data() } as Community;
   },
 
+  async isCommunityMember(communityId: string, userId: string): Promise<boolean> {
+    if (!isValidQueryString(communityId) || !isValidQueryString(userId)) return false;
+    const snap = await getDoc(doc(db, 'communities', communityId, 'members', userId));
+    if (!snap.exists()) return false;
+    return !snap.data()?.isBanned;
+  },
+
+  async getAnnouncementsChannelId(communityId: string): Promise<string | null> {
+    if (!isValidQueryString(communityId)) return null;
+    const q = query(
+      subcollections.communityChannels(communityId),
+      where('isAnnouncements', '==', true),
+      limit(1)
+    );
+    const snap = await getDocs(q);
+    return snap.empty ? null : snap.docs[0].id;
+  },
+
   subscribeToUserCommunities(
     userId: string,
     cb: (communities: Community[]) => void,
     onError?: SnapshotErrorHandler
   ): Unsubscribe {
+    if (!isValidQueryString(userId)) {
+      onError?.({ code: 'invalid-argument', message: 'userId is required' });
+      cb([]);
+      return () => {};
+    }
+
     const membersQ = query(
       collectionGroup(db, 'members'),
       where('userId', '==', userId),

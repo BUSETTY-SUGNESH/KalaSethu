@@ -11,7 +11,7 @@ import { followUser, unfollowUser, isFollowing as checkIsFollowing } from "@/lib
 import { getArtworksByArtist, getPublishedArtworksByArtist } from "@/lib/services/artwork-service";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useUIStore } from "@/lib/stores/ui-store";
-import { getCommunityByOwner } from "@/lib/services/community-messaging-service";
+import { getCommunityByOwner, joinCommunity, isCommunityMember, getAnnouncementsChannelId } from "@/lib/services/community-messaging-service";
 import type { User, Artwork, Community } from "@/app/types";
 import { ARTWORK_PLACEHOLDER } from "@/lib/constants/placeholders";
 
@@ -48,6 +48,9 @@ export default function PublicProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isFollowActionLoading, setIsFollowActionLoading] = useState(false);
   const [artistCommunity, setArtistCommunity] = useState<Community | null>(null);
+  const [isCommunityMemberState, setIsCommunityMemberState] = useState(false);
+  const [announcementsChannelId, setAnnouncementsChannelId] = useState<string | null>(null);
+  const [isJoinCommunityLoading, setIsJoinCommunityLoading] = useState(false);
 
   useEffect(() => {
     if (!profileId) return;
@@ -59,6 +62,14 @@ export default function PublicProfilePage() {
         if (data && (data.role === 'verified_artist' || data.isVerified)) {
           const community = await getCommunityByOwner(profileId);
           setArtistCommunity(community);
+          if (community) {
+            const channelId = await getAnnouncementsChannelId(community.id);
+            setAnnouncementsChannelId(channelId);
+            if (currentUser && currentUser.id !== profileId) {
+              const member = await isCommunityMember(community.id, currentUser.id);
+              setIsCommunityMemberState(member);
+            }
+          }
         }
 
         const portfolioVisible = data && shouldShowPortfolio(
@@ -143,6 +154,32 @@ export default function PublicProfilePage() {
     }
     router.push(`/dashboard/messages?userId=${profileId}`);
   }
+
+  async function handleCommunityAction() {
+    if (!artistCommunity) return;
+    if (!isAuthenticated || !currentUser) {
+      router.push(`/login?redirect=/profile/${profileId}`);
+      return;
+    }
+    if (isCommunityMemberState) {
+      const channel = announcementsChannelId ? `&channel=${announcementsChannelId}` : '';
+      router.push(`/dashboard/communities?community=${artistCommunity.id}${channel}`);
+      return;
+    }
+    setIsJoinCommunityLoading(true);
+    try {
+      await joinCommunity(artistCommunity.id, currentUser.displayName, currentUser.avatarUrl);
+      setIsCommunityMemberState(true);
+      addToast({ type: 'success', title: 'Joined community' });
+    } catch {
+      addToast({ type: 'error', title: 'Failed to join community' });
+    } finally {
+      setIsJoinCommunityLoading(false);
+    }
+  }
+
+  const isVerifiedArtistProfile =
+    profile?.role === 'verified_artist' || profile?.isVerified === true;
 
   if (isLoading) {
     return (
@@ -241,15 +278,28 @@ export default function PublicProfilePage() {
                 <Button variant="outline" icon="chat" iconPosition="left" onClick={handleMessage}>
                   Message
                 </Button>
-                {artistCommunity && (
-                  <Button
-                    variant="outline"
-                    icon="groups"
-                    iconPosition="left"
-                    onClick={() => router.push(`/dashboard/communities?community=${artistCommunity.id}`)}
-                  >
-                    Community
-                  </Button>
+                {isVerifiedArtistProfile && (
+                  artistCommunity ? (
+                    <Button
+                      variant="outline"
+                      icon="groups"
+                      iconPosition="left"
+                      onClick={handleCommunityAction}
+                      disabled={isJoinCommunityLoading}
+                    >
+                      {isCommunityMemberState ? 'View Community' : 'Join Community'}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      icon="groups"
+                      iconPosition="left"
+                      disabled
+                      title="This artist has not set up a community yet"
+                    >
+                      No Community Yet
+                    </Button>
+                  )
                 )}
               </div>
             ) : (

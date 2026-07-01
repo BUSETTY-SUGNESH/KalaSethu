@@ -107,7 +107,7 @@ function arePreferencesEqual(a: PreferencesState, b: PreferencesState): boolean 
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-export default function ProfileSettingsForm() {
+export default function ProfileSettingsForm({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter();
   const { user, setUser } = useAuthStore();
   const { addToast } = useUIStore();
@@ -552,18 +552,21 @@ export default function ProfileSettingsForm() {
   }
 
   return (
-    <div className="container section-gap" style={{ maxWidth: 1024, margin: "0 auto" }}>
-      <div style={{ marginBottom: 24 }}>
-        <Button
-          variant="ghost"
-          icon="arrow_back"
-          iconPosition="left"
-          onClick={handleBack}
-        >
-          Back
-        </Button>
-      </div>
+    <div className={embedded ? undefined : "container section-gap"} style={embedded ? undefined : { maxWidth: 1024, margin: "0 auto" }}>
+      {!embedded && (
+        <div style={{ marginBottom: 24 }}>
+          <Button
+            variant="ghost"
+            icon="arrow_back"
+            iconPosition="left"
+            onClick={handleBack}
+          >
+            Back
+          </Button>
+        </div>
+      )}
 
+      {!embedded && (
       <div className="flex justify-between items-start" style={{ marginBottom: 40 }}>
         <div>
           <h1 className="text-display-sm text-primary">Settings</h1>
@@ -580,6 +583,7 @@ export default function ProfileSettingsForm() {
           View Profile
         </Button>
       </div>
+      )}
 
       {/* Tabs Header */}
       <div className="flex gap-16" style={TAB_BAR_STYLE}>

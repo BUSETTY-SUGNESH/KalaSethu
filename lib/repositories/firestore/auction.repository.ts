@@ -21,6 +21,7 @@ import {
   type DocumentSnapshot,
   type Unsubscribe,
 } from '@/lib/firebase/firestore';
+import { emptyPaginatedResult, filterValidIds, isValidQueryString } from '@/lib/firebase/query-guards';
 import type { Auction, AuctionStatus, Bid, PaginatedResult } from '@/app/types';
 import { AUCTION_BID_HISTORY_LIMIT } from '@/lib/constants/auction';
 
@@ -78,14 +79,15 @@ export const auctionRepository = {
   },
 
   async findAuctionsByIds(ids: string[]): Promise<Auction[]> {
-    if (ids.length === 0) return [];
+    const validIds = filterValidIds(ids);
+    if (validIds.length === 0) return [];
     
     // Firestore 'in' queries are limited to 30 items. Chunking.
     const chunkSize = 30;
     const allAuctions: Auction[] = [];
     
-    for (let i = 0; i < ids.length; i += chunkSize) {
-      const chunk = ids.slice(i, i + chunkSize);
+    for (let i = 0; i < validIds.length; i += chunkSize) {
+      const chunk = validIds.slice(i, i + chunkSize);
       const q = query(
         collections.auctions(),
         where('__name__', 'in', chunk)
@@ -122,6 +124,7 @@ export const auctionRepository = {
   },
 
   async findByArtworkId(artworkId: string): Promise<Auction[]> {
+    if (!isValidQueryString(artworkId)) return [];
     const q = query(
       collections.auctions(),
       where('artworkId', '==', artworkId),
@@ -137,6 +140,7 @@ export const auctionRepository = {
     pageSize: number = 20,
     lastDoc?: DocumentSnapshot | null
   ): Promise<PaginatedResult<Auction>> {
+    if (!isValidQueryString(artistId)) return emptyPaginatedResult<Auction>();
     return paginatedQuery<Auction>(
       collections.auctions(),
       [where('artistId', '==', artistId), orderBy('createdAt', 'desc')],
@@ -151,6 +155,7 @@ export const auctionRepository = {
     auctionId: string,
     max: number = AUCTION_BID_HISTORY_LIMIT
   ): Promise<Bid[]> {
+    if (!isValidQueryString(auctionId)) return [];
     const q = query(
       subcollections.auctionBids(auctionId),
       orderBy('amount', 'desc'),
@@ -161,6 +166,10 @@ export const auctionRepository = {
   },
 
   subscribeToBids(auctionId: string, cb: (bids: Bid[]) => void): Unsubscribe {
+    if (!isValidQueryString(auctionId)) {
+      cb([]);
+      return () => {};
+    }
     const q = query(
       subcollections.auctionBids(auctionId),
       orderBy('amount', 'desc'),
@@ -176,6 +185,7 @@ export const auctionRepository = {
     pageSize: number = 20,
     lastDoc?: DocumentSnapshot | null
   ): Promise<PaginatedResult<Bid>> {
+    if (!isValidQueryString(userId)) return emptyPaginatedResult<Bid>();
     const baseConstraints = [
       where('bidderId', '==', userId),
       orderBy('timestamp', 'desc'),

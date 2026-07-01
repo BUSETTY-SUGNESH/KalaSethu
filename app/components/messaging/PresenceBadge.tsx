@@ -39,7 +39,7 @@ export function ReadReceiptIcon({
 }) {
   if (!isOwn) return null;
   return (
-    <span style={{ marginLeft: 4, opacity: isRead ? 1 : 0.7, display: 'inline-flex' }}>
+    <span className={`chat-read-receipt ${isRead ? 'is-read' : ''}`} aria-hidden="true">
       <Icon name={isRead ? 'done_all' : 'done'} size={14} />
     </span>
   );

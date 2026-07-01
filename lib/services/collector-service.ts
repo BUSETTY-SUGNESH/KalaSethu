@@ -2,6 +2,7 @@
 // KalaSetu — Collector Service
 // Shared data helpers for customer/collector dashboard pages.
 // ============================================================
+import { isValidQueryString, filterValidIds } from '@/lib/firebase/query-guards';
 import type { Auction, Order, OrderStatus, Post } from '@/app/types';
 import { getBuyerOrders } from '@/lib/services/order-service';
 import {
@@ -53,6 +54,26 @@ export type FollowedArtistUpdate = {
   authorAvatarUrl?: string;
   content: string;
   createdAt: string;
+};
+
+export type RecentPurchase = {
+  orderId: string;
+  artworkId: string;
+  title: string;
+  imageUrl: string;
+  price: number;
+  status: OrderStatus;
+  purchasedAt: string;
+};
+
+export type AuctionReminder = {
+  auctionId: string;
+  artworkId: string;
+  title: string;
+  imageUrl: string;
+  endsAt: string;
+  currentBid: number;
+  userMaxBid: number;
 };
 
 export function formatCompactINR(value: number): string {
@@ -125,12 +146,13 @@ function dedupeCollectorItems(items: CollectorItem[]): CollectorItem[] {
 }
 
 export async function getCollectorItems(userId: string): Promise<CollectorItem[]> {
+  if (!isValidQueryString(userId)) return [];
   const [ordersResult, bidsResult] = await Promise.all([
     getBuyerOrders(userId, FETCH_PAGE_SIZE),
     getUserBids(userId, FETCH_PAGE_SIZE),
   ]);
 
-  const auctionIds = [...new Set(bidsResult.data.map((bid) => bid.auctionId).filter(Boolean))];
+  const auctionIds = filterValidIds(bidsResult.data.map((bid) => bid.auctionId));
   const auctions = auctionIds.length > 0 ? await getAuctionsByIds(auctionIds) : [];
 
   const orderItems = itemsFromOrders(ordersResult.data);
@@ -186,12 +208,13 @@ function orderActivityMessage(order: Order): string {
 }
 
 export async function getRecentActivity(userId: string, limit = 5): Promise<CollectorActivityItem[]> {
+  if (!isValidQueryString(userId)) return [];
   const [bidsResult, ordersResult] = await Promise.all([
     getUserBids(userId, 5),
     getBuyerOrders(userId, 5),
   ]);
 
-  const auctionIds = [...new Set(bidsResult.data.map((bid) => bid.auctionId).filter(Boolean))];
+  const auctionIds = filterValidIds(bidsResult.data.map((bid) => bid.auctionId));
   const auctions = auctionIds.length > 0 ? await getAuctionsByIds(auctionIds) : [];
   const auctionById = new Map(auctions.map((auction) => [auction.id, auction]));
 
@@ -227,10 +250,13 @@ export async function getFollowedArtistUpdates(
   userId: string,
   limit = 3
 ): Promise<FollowedArtistUpdate[]> {
+  if (!isValidQueryString(userId)) return [];
   const following = await getFollowing(userId, 50);
   if (following.length === 0) return [];
 
-  const followingIds = new Set(following.map((entry) => entry.followingId));
+  const followingIds = new Set(
+    following.map((entry) => entry.followingId).filter(isValidQueryString)
+  );
   const feed = await getFeedPosts(20);
 
   return feed.data
@@ -251,15 +277,86 @@ export async function getFollowedArtistUpdates(
     }));
 }
 
-export async function getCollectorDashboardData(userId: string) {
-  const [items, bidsResult, activity, artistUpdates] = await Promise.all([
-    getCollectorItems(userId),
-    getUserBids(userId, FETCH_PAGE_SIZE),
-    getRecentActivity(userId),
-    getFollowedArtistUpdates(userId),
-  ]);
+export async function getRecentPurchases(userId: string, limit = 4): Promise<RecentPurchase[]> {
+  if (!isValidQueryString(userId)) return [];
+  const ordersResult = await getBuyerOrders(userId, limit);
+  const purchases: RecentPurchase[] = [];
 
-  const auctionIds = [...new Set(bidsResult.data.map((bid) => bid.auctionId).filter(Boolean))];
+  for (const order of ordersResult.data) {
+    if (order.status === 'cancelled' || order.status === 'refunded') continue;
+    for (const item of order.items) {
+      purchases.push({
+        orderId: order.id,
+        artworkId: item.artworkId,
+        title: item.artworkTitle,
+        imageUrl: item.artworkImageUrl || ARTWORK_PLACEHOLDER,
+        price: item.price,
+        status: order.status,
+        purchasedAt: order.createdAt,
+      });
+    }
+  }
+
+  return purchases
+    .sort((a, b) => new Date(b.purchasedAt).getTime() - new Date(a.purchasedAt).getTime())
+    .slice(0, limit);
+}
+
+export async function getAuctionReminders(userId: string, limit = 3): Promise<AuctionReminder[]> {
+  if (!isValidQueryString(userId)) return [];
+  const bidsResult = await getUserBids(userId, FETCH_PAGE_SIZE);
+  const auctionIds = filterValidIds(bidsResult.data.map((bid) => bid.auctionId));
+  if (auctionIds.length === 0) return [];
+
+  const auctions = await getAuctionsByIds(auctionIds);
+  const now = Date.now();
+  const maxBidByAuction = new Map<string, number>();
+  bidsResult.data.forEach((bid) => {
+    const existing = maxBidByAuction.get(bid.auctionId) || 0;
+    if (bid.amount > existing) maxBidByAuction.set(bid.auctionId, bid.amount);
+  });
+
+  return auctions
+    .filter((auction) => {
+      const endsAt = new Date(auction.endsAt).getTime();
+      const isLive = ['live', 'ending_soon'].includes(auction.status);
+      return isLive && endsAt > now && endsAt - now <= ENDING_SOON_MS;
+    })
+    .sort((a, b) => new Date(a.endsAt).getTime() - new Date(b.endsAt).getTime())
+    .slice(0, limit)
+    .map((auction) => ({
+      auctionId: auction.id,
+      artworkId: auction.artworkId,
+      title: auction.artworkTitle,
+      imageUrl: auction.artworkImageUrl || ARTWORK_PLACEHOLDER,
+      endsAt: auction.endsAt,
+      currentBid: auction.currentBid,
+      userMaxBid: maxBidByAuction.get(auction.id) || 0,
+    }));
+}
+
+export async function getCollectorDashboardData(userId: string) {
+  if (!isValidQueryString(userId)) {
+    return {
+      items: [] as CollectorItem[],
+      stats: getCollectorStats([], EMPTY_BID_ANALYTICS),
+      activity: [] as CollectorActivityItem[],
+      artistUpdates: [] as FollowedArtistUpdate[],
+      recentPurchases: [] as RecentPurchase[],
+      auctionReminders: [] as AuctionReminder[],
+    };
+  }
+  const [items, bidsResult, activity, artistUpdates, recentPurchases, auctionReminders] =
+    await Promise.all([
+      getCollectorItems(userId),
+      getUserBids(userId, FETCH_PAGE_SIZE),
+      getRecentActivity(userId),
+      getFollowedArtistUpdates(userId),
+      getRecentPurchases(userId),
+      getAuctionReminders(userId),
+    ]);
+
+  const auctionIds = filterValidIds(bidsResult.data.map((bid) => bid.auctionId));
   const userBidAuctions = auctionIds.length > 0 ? await getAuctionsByIds(auctionIds) : [];
 
   let analytics: BidAnalytics = { ...EMPTY_BID_ANALYTICS };
@@ -271,5 +368,5 @@ export async function getCollectorDashboardData(userId: string) {
 
   const stats = getCollectorStats(items, analytics, userBidAuctions);
 
-  return { items, stats, activity, artistUpdates };
+  return { items, stats, activity, artistUpdates, recentPurchases, auctionReminders };
 }

@@ -20,6 +20,7 @@ import {
   type ArtworkPaginationCursor,
   type QueryConstraint,
 } from '@/lib/firebase/firestore';
+import { emptyPaginatedResult, isValidQueryString, filterValidIds } from '@/lib/firebase/query-guards';
 import type { Artwork, ArtworkStatus, MarketplaceCategorySummary, PaginatedResult } from '@/app/types';
 import {
   ARTWORK_CATEGORIES,
@@ -40,6 +41,7 @@ function getSearchTermVariants(term: string): string[] {
 
 export const artworkRepository = {
   async findById(id: string): Promise<Artwork | null> {
+    if (!isValidQueryString(id)) return null;
     const snap = await getDoc(docRef.artwork(id));
     if (!snap.exists()) return null;
     return { id: snap.id, ...snap.data() } as Artwork;
@@ -83,6 +85,7 @@ export const artworkRepository = {
     pageSize: number = 20,
     lastDoc?: DocumentSnapshot | null
   ): Promise<PaginatedResult<Artwork>> {
+    if (!isValidQueryString(artistId)) return emptyPaginatedResult<Artwork>();
     return paginatedQuery<Artwork>(
       collections.artworks(),
       [where('artistId', '==', artistId), orderBy('createdAt', 'desc')],
@@ -96,6 +99,7 @@ export const artworkRepository = {
     pageSize: number = 20,
     lastDoc?: DocumentSnapshot | null
   ): Promise<PaginatedResult<Artwork>> {
+    if (!isValidQueryString(artistId)) return emptyPaginatedResult<Artwork>();
     return paginatedQuery<Artwork>(
       collections.artworks(),
       [
@@ -118,8 +122,12 @@ export const artworkRepository = {
     }
   ): Promise<PaginatedResult<Artwork>> {
     const constraints: QueryConstraint[] = [where('status', '==', 'published')];
-    if (filters?.category) constraints.push(where('category', '==', filters.category));
-    if (filters?.medium) constraints.push(where('medium', '==', filters.medium));
+    if (isValidQueryString(filters?.category)) {
+      constraints.push(where('category', '==', filters.category));
+    }
+    if (isValidQueryString(filters?.medium)) {
+      constraints.push(where('medium', '==', filters.medium));
+    }
     switch (filters?.sortBy) {
       case 'price_low': constraints.push(orderBy('price', 'asc')); break;
       case 'price_high': constraints.push(orderBy('price', 'desc')); break;
@@ -146,6 +154,7 @@ export const artworkRepository = {
     pageSize: number = 20,
     lastDoc?: DocumentSnapshot | null
   ): Promise<PaginatedResult<Artwork>> {
+    if (!isValidQueryString(category)) return emptyPaginatedResult<Artwork>();
     return paginatedQuery<Artwork>(
       collections.artworks(),
       [

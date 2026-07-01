@@ -1,11 +1,17 @@
-/** Fixed homepage hero — not driven by CMS or featured artwork data. */
+/** Fixed homepage hero — brand Nataraja identity, not driven by artwork data. */
 export const HOME_HERO = {
-  badge: 'Art of the Week',
+  badge: 'Heritage Spotlight',
   title: 'Discover Authentic Indian Art',
   description:
-    'A global art ecosystem connecting collectors with authentic Indian artisans. Explore curated collections, support heritage, and discover unique stories.',
+    'KalaSetu is a living bridge between India’s master artisans and collectors worldwide — preserving heritage through verified artists, authenticated provenance, curated marketplace listings, and live auctions that keep traditional art forms thriving.',
   ctaHref: '/marketplace',
   ctaLabel: 'View Masterpiece',
   imageSrc: '/hero.png',
   imageAlt: 'Bronze Nataraja sculpture — Indian heritage art',
+  trustItems: [
+    { icon: 'verified', label: 'Verified Artists' },
+    { icon: 'history_edu', label: 'Authentic Provenance' },
+    { icon: 'lock', label: 'Secure Payments' },
+    { icon: 'gavel', label: 'Live Auctions' },
+  ],
 } as const;

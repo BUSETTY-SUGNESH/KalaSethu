@@ -10,10 +10,11 @@ import CategoryCollectionCard from "@/app/components/cards/CategoryCollectionCar
 import HomeAuctionCard from "@/app/components/home/HomeAuctionCard";
 import ArtworkCardGrid, { ArtworkCardSkeleton, SoldArtworkCardGrid } from "@/app/components/home/ArtworkCardGrid";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { isValidQueryString } from "@/lib/firebase/query-guards";
 import { getPersonalizedArtworks } from "@/lib/services/home-recommendations";
 import type { HomeBuyerData } from "@/lib/services/server/home-admin.service";
 import type { Artwork, CalendarEvent, Post, UserProfile } from "@/app/types";
-import { HOME_HERO } from "@/lib/constants/home-hero";
+import HomeHero from "@/app/components/home/HomeHero";
 
 function buildBuyerTicker(
   auctions: HomeBuyerData["endingSoonAuctions"],
@@ -80,42 +81,6 @@ function EventDateBox({ dateStr, urgent = false }: { dateStr: string; urgent?: b
   );
 }
 
-function HomeHero() {
-  return (
-    <section className="container" style={{ paddingTop: 80, paddingBottom: 80 }}>
-      <div className="hero-section">
-        <div className="hero-text">
-          <div className="flex flex-col gap-16">
-            <span className="text-label-md hero-badge">
-              <span className="hero-badge-line" />
-              {HOME_HERO.badge}
-            </span>
-            <h1 className="text-display-lg text-primary">{HOME_HERO.title}</h1>
-            <p className="text-body-lg text-on-surface-variant">{HOME_HERO.description}</p>
-          </div>
-          <div>
-            <Link href={HOME_HERO.ctaHref} className="btn btn-primary btn-lg">
-              {HOME_HERO.ctaLabel}
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_forward</span>
-            </Link>
-          </div>
-        </div>
-        <div className="hero-image-wrap">
-          <div className="hero-image-overlay" />
-          <Image
-            src={HOME_HERO.imageSrc}
-            alt={HOME_HERO.imageAlt}
-            fill
-            sizes="(max-width: 768px) 100vw, 50vw"
-            priority
-            style={{ objectFit: "cover" }}
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export default function BuyerHomePage({ initialData }: { initialData: HomeBuyerData }) {
   const router = useRouter();
   const { user, isAuthenticated } = useAuthStore();
@@ -144,7 +109,7 @@ export default function BuyerHomePage({ initialData }: { initialData: HomeBuyerD
   }, [trendingArtworks, recentlyListed, recentlySold]);
 
   useEffect(() => {
-    if (!isAuthenticated || !user) {
+    if (!isAuthenticated || !user?.id || !isValidQueryString(user.id)) {
       setPersonalized([]);
       return;
     }

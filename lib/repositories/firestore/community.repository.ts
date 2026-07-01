@@ -25,6 +25,7 @@ import {
   type Unsubscribe,
   type QueryConstraint,
 } from '@/lib/firebase/firestore';
+import { emptyPaginatedResult, isValidQueryString } from '@/lib/firebase/query-guards';
 import { functions } from '@/lib/firebase/config';
 import { httpsCallable } from 'firebase/functions';
 import type { Post, Comment, Follow, Bookmark, PaginatedResult, CommunityContributor, UserRole } from '@/app/types';
@@ -88,6 +89,7 @@ export const communityRepository = {
     pageSize: number = 20,
     lastDoc?: DocumentSnapshot | null
   ): Promise<PaginatedResult<Post>> {
+    if (!isValidQueryString(userId)) return emptyPaginatedResult<Post>();
     return paginatedQuery<Post>(
       collections.posts(),
       [where('authorId', '==', userId), orderBy('createdAt', 'desc')],
@@ -101,6 +103,7 @@ export const communityRepository = {
     pageSize: number = 20,
     lastDoc?: DocumentSnapshot | null
   ): Promise<PaginatedResult<Post>> {
+    if (!isValidQueryString(category)) return emptyPaginatedResult<Post>();
     return paginatedQuery<Post>(
       collections.posts(),
       [where('category', '==', category), orderBy('createdAt', 'desc')],
@@ -256,6 +259,7 @@ export const communityRepository = {
   },
 
   async getFollowers(userId: string, max: number = 50): Promise<Follow[]> {
+    if (!isValidQueryString(userId)) return [];
     const q = query(
       subcollections.userFollowers(userId),
       orderBy('createdAt', 'desc'),
@@ -266,6 +270,7 @@ export const communityRepository = {
   },
 
   async getFollowing(userId: string, max: number = 50): Promise<Follow[]> {
+    if (!isValidQueryString(userId)) return [];
     const q = query(
       subcollections.userFollowing(userId),
       orderBy('createdAt', 'desc'),
@@ -282,6 +287,9 @@ export const communityRepository = {
     targetId: string,
     targetType: Bookmark['targetType']
   ): Promise<boolean> {
+    if (!isValidQueryString(userId) || !isValidQueryString(targetId)) {
+      throw new Error('Invalid bookmark parameters');
+    }
     const q = query(
       collections.favorites(),
       where('userId', '==', userId),
@@ -306,6 +314,7 @@ export const communityRepository = {
     userId: string,
     targetType?: Bookmark['targetType']
   ): Promise<Bookmark[]> {
+    if (!isValidQueryString(userId)) return [];
     const constraints: QueryConstraint[] = [where('userId', '==', userId)];
     if (targetType) constraints.push(where('targetType', '==', targetType));
     constraints.push(orderBy('createdAt', 'desc'));

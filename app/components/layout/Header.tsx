@@ -194,17 +194,25 @@ export default function Header() {
                           Admin Console
                         </Link>
                       )}
-                      <Link href={`/dashboard${isArtist() ? '/artist' : '/collector'}`} className="notification-item" onClick={() => setDropdownOpen(false)}>
+                      <Link href={isArtist() ? '/dashboard/artist' : '/dashboard'} className="notification-item" onClick={() => setDropdownOpen(false)}>
                         <span className="material-symbols-outlined" style={{ fontSize: 20 }}>dashboard</span>
-                        Dashboard
+                        {isArtist() ? 'Artist Studio' : 'Collector Dashboard'}
                       </Link>
+                      {!isArtist() && (
+                        <Link href="/dashboard/orders" className="notification-item" onClick={() => setDropdownOpen(false)}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>receipt_long</span>
+                          Orders
+                        </Link>
+                      )}
+                      {isArtist() && (
+                        <Link href="/dashboard/artist/orders" className="notification-item" onClick={() => setDropdownOpen(false)}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>receipt_long</span>
+                          Sales Orders
+                        </Link>
+                      )}
                       <Link href={`/profile/${user?.id}`} className="notification-item" onClick={() => setDropdownOpen(false)}>
                         <span className="material-symbols-outlined" style={{ fontSize: 20 }}>person</span>
                         Profile
-                      </Link>
-                      <Link href="/dashboard/orders" className="notification-item" onClick={() => setDropdownOpen(false)}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 20 }}>receipt_long</span>
-                        Orders
                       </Link>
                       <button className="notification-item" onClick={handleSignOut} style={{ color: "var(--color-status-urgency)", width: "100%", textAlign: "left", border: "none", background: "none" }}>
                         <span className="material-symbols-outlined" style={{ fontSize: 20 }}>logout</span>

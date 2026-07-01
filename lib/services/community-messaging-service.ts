@@ -62,6 +62,14 @@ export async function getCommunityByOwner(ownerId: string) {
   return communityMessagingRepository.getCommunityByOwner(ownerId);
 }
 
+export async function isCommunityMember(communityId: string, userId: string) {
+  return communityMessagingRepository.isCommunityMember(communityId, userId);
+}
+
+export async function getAnnouncementsChannelId(communityId: string) {
+  return communityMessagingRepository.getAnnouncementsChannelId(communityId);
+}
+
 export async function sendChannelMessage(
   communityId: string,
   channelId: string,

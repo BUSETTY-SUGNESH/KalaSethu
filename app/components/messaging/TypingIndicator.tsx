@@ -20,7 +20,9 @@ export default function TypingIndicator({ names = [] }: TypingIndicatorProps) {
       aria-live="polite"
     >
       {label}
-      <span className="typing-dots">...</span>
+      <span className="typing-dots" aria-hidden="true">
+        <span />
+      </span>
     </div>
   );
 }

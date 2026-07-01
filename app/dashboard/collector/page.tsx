@@ -10,6 +10,7 @@ import {
   getCollectorItems,
   type CollectorItem,
 } from "@/lib/services/collector-service";
+import CollectorSubpageHero from "@/app/components/dashboard/CollectorSubpageHero";
 
 export default function CollectorPage() {
   const { user } = useAuthStore();
@@ -47,35 +48,25 @@ export default function CollectorPage() {
 
   if (isLoading) {
     return (
-      <>
-        <div className="flex justify-between items-end mb-8" style={{ marginBottom: 32 }}>
-          <div>
-            <div className="skeleton" style={{ width: 240, height: 40, marginBottom: 8 }} />
-            <div className="skeleton" style={{ width: 320, height: 20 }} />
-          </div>
-          <div className="skeleton" style={{ width: 220, height: 44, borderRadius: "var(--radius-full)" }} />
-        </div>
-
+      <div className="collector-dashboard-page">
+        <div className="skeleton dashboard-sub-hero" style={{ height: 120, marginBottom: 32 }} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 32 }}>
           {[1, 2, 3].map((item) => (
             <div key={item} className="skeleton" style={{ height: 360, borderRadius: "var(--radius-lg)" }} />
           ))}
         </div>
-      </>
+      </div>
     );
   }
 
   return (
-    <>
-      <div className="flex justify-between items-end mb-8" style={{ marginBottom: 32 }}>
-        <div>
-          <h1 className="text-headline-lg text-primary">Your Collection</h1>
-          <p className="text-body-md text-on-surface-variant mt-2" style={{ marginTop: 8 }}>
-            Browse and manage your acquired heritage pieces.
-          </p>
-        </div>
-        <div className="flex gap-12">
-          <div className="header-search">
+    <div className="collector-dashboard-page">
+      <CollectorSubpageHero
+        eyebrow="My Collection"
+        title="Purchased Collection"
+        description="Acquired pieces from marketplace purchases and auction wins."
+        actions={
+          <div className="header-search" style={{ minWidth: 240 }}>
             <Icon name="search" size={20} />
             <input
               type="text"
@@ -84,8 +75,13 @@ export default function CollectorPage() {
               onChange={(event) => setSearchQuery(event.target.value)}
             />
           </div>
-        </div>
-      </div>
+        }
+        quickLinks={[
+          { href: '/marketplace', icon: 'storefront', label: 'Marketplace' },
+          { href: '/dashboard/bids', icon: 'gavel', label: 'Active Bids' },
+          { href: '/dashboard/orders', icon: 'receipt_long', label: 'Orders' },
+        ]}
+      />
 
       {items.length === 0 ? (
         <div className="empty-state">
@@ -115,6 +111,6 @@ export default function CollectorPage() {
           ))}
         </div>
       )}
-    </>
+    </div>
   );
 }

@@ -11,6 +11,7 @@ import { useAuthStore } from "@/lib/stores/auth-store";
 import { useUIStore } from "@/lib/stores/ui-store";
 import type { Artwork } from "@/app/types";
 import { ARTWORK_PLACEHOLDER } from "@/lib/constants/placeholders";
+import CollectorSubpageHero from "@/app/components/dashboard/CollectorSubpageHero";
 
 export default function SavedArtworksPage() {
   const { user } = useAuthStore();
@@ -55,14 +56,14 @@ export default function SavedArtworksPage() {
 
   if (isLoading) {
     return (
-      <>
-        <h1 className="text-headline-lg text-primary" style={{ marginBottom: 32 }}>Saved Artworks</h1>
+      <div className="collector-dashboard-page">
+        <div className="skeleton dashboard-sub-hero" style={{ height: 100, marginBottom: 32 }} />
         <div className="grid-auto">
           {[1, 2, 3].map((item) => (
             <div key={item} className="skeleton" style={{ height: 360 }} />
           ))}
         </div>
-      </>
+      </div>
     );
   }
 
@@ -79,18 +80,22 @@ export default function SavedArtworksPage() {
   }
 
   return (
-    <>
-      <div className="flex justify-between items-end" style={{ marginBottom: 32 }}>
-        <div>
-          <h1 className="text-headline-lg text-primary">Saved Artworks</h1>
-          <p className="text-body-md text-on-surface-variant" style={{ marginTop: 8 }}>
-            Pieces you bookmarked from KalaMarket.
-          </p>
-        </div>
-        <Link href="/marketplace">
-          <Button variant="outline" icon="storefront" iconPosition="left">Browse Marketplace</Button>
-        </Link>
-      </div>
+    <div className="collector-dashboard-page">
+      <CollectorSubpageHero
+        eyebrow="Wishlist"
+        title="Saved Artworks"
+        description="Saved pieces you want to acquire from KalaMarket."
+        actions={
+          <Link href="/marketplace">
+            <Button variant="outline" icon="storefront" iconPosition="left">Browse Marketplace</Button>
+          </Link>
+        }
+        quickLinks={[
+          { href: '/explore', icon: 'explore', label: 'Discover Art' },
+          { href: '/dashboard/collector', icon: 'collections', label: 'My Collection' },
+          { href: '/bids', icon: 'gavel', label: 'Live Auctions' },
+        ]}
+      />
 
       {artworks.length === 0 ? (
         <div className="empty-state">
@@ -119,6 +124,6 @@ export default function SavedArtworksPage() {
           ))}
         </div>
       )}
-    </>
+    </div>
   );
 }

@@ -14,6 +14,7 @@ import {
   ARTWORK_PLACEHOLDER,
   getOrderStatusPillClass,
 } from "@/lib/utils/order-display";
+import CollectorSubpageHero from "@/app/components/dashboard/CollectorSubpageHero";
 
 export default function OrdersPage() {
   const { user } = useAuthStore();
@@ -57,8 +58,8 @@ export default function OrdersPage() {
 
   if (isLoading) {
     return (
-      <div className="container" style={{ padding: "48px var(--margin-desktop)" }}>
-        <h1 className="text-display-sm text-primary mb-32">Your Orders</h1>
+      <div className="collector-dashboard-page">
+        <div className="skeleton dashboard-sub-hero" style={{ height: 100, marginBottom: 32 }} />
         <div className="flex flex-col gap-24">
           {[1, 2, 3].map((i) => (
             <div key={i} className="skeleton" style={{ height: 160, borderRadius: "var(--radius-lg)" }} />
@@ -69,8 +70,22 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="container" style={{ padding: "48px var(--margin-desktop)" }}>
-      <h1 className="text-display-sm text-primary" style={{ marginBottom: 32 }}>Your Orders</h1>
+    <div className="collector-dashboard-page">
+      <CollectorSubpageHero
+        eyebrow="Orders"
+        title="Your Orders"
+        description="Track purchases, delivery status, and order history."
+        actions={
+          <Link href="/marketplace">
+            <Button variant="outline" icon="storefront" iconPosition="left">Browse Marketplace</Button>
+          </Link>
+        }
+        quickLinks={[
+          { href: '/dashboard/collector', icon: 'collections', label: 'My Collection' },
+          { href: '/dashboard/bids', icon: 'gavel', label: 'Active Bids' },
+          { href: '/dashboard/saved', icon: 'favorite', label: 'Wishlist' },
+        ]}
+      />
 
       {orders.length === 0 ? (
         <div className="empty-state">
@@ -85,7 +100,7 @@ export default function OrdersPage() {
       ) : (
         <div className="flex flex-col gap-24">
           {orders.map((order) => (
-            <div key={order.id} className="bg-surface-container-lowest" style={{ borderRadius: "var(--radius-lg)", border: "1px solid rgba(196, 199, 199, 0.2)", overflow: "hidden" }}>
+            <div key={order.id} className="dashboard-panel-card" style={{ overflow: "hidden", padding: 0 }}>
               <div className="bg-surface-container-low flex justify-between items-center" style={{ padding: "16px 24px", borderBottom: "1px solid rgba(196, 199, 199, 0.1)" }}>
                 <div className="flex gap-48">
                   <div>

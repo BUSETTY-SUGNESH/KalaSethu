@@ -3,6 +3,7 @@
 // Business logic layer bridging UI to Repository layer.
 // ============================================================
 import { auctionRepository } from '@/lib/repositories';
+import { isValidQueryString } from '@/lib/firebase/query-guards';
 import { pickPrimaryAuction } from '@/lib/utils/artwork-listing-state';
 import { isAuctionAcceptingBids } from '@/lib/utils/auction-display';
 import type {
@@ -60,6 +61,7 @@ export async function getAuction(auctionId: string): Promise<Auction | null> {
 }
 
 export async function getAuctionForArtwork(artworkId: string): Promise<Auction | null> {
+  if (!isValidQueryString(artworkId)) return null;
   const auctions = await auctionRepository.findByArtworkId(artworkId);
   return pickPrimaryAuction(auctions);
 }
@@ -112,6 +114,9 @@ export async function getUserBids(
   pageSize: number = 20,
   lastDoc?: DocumentSnapshot | null
 ): Promise<PaginatedResult<Bid>> {
+  if (!isValidQueryString(userId)) {
+    return { data: [], lastDoc: null, hasMore: false };
+  }
   return auctionRepository.findBidsByUser(userId, pageSize, lastDoc);
 }
 

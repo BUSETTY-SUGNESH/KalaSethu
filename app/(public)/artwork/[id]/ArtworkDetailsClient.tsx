@@ -23,6 +23,7 @@ import {
   showsPurchaseUi,
 } from '@/lib/utils/artwork-listing-state';
 import { canViewArtwork, isPubliclyVisible } from '@/lib/utils/artwork-visibility';
+import { isValidQueryString } from '@/lib/firebase/query-guards';
 
 interface ArtworkDetailsClientProps {
   artworkId: string;
@@ -89,7 +90,7 @@ export default function ArtworkDetailsClient({
 
   useEffect(() => {
     async function loadArtwork() {
-      if (!artworkId) return;
+      if (!isValidQueryString(artworkId)) return;
 
       if (initialArtwork) {
         setArtwork(initialArtwork);
