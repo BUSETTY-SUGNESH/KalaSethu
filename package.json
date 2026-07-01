@@ -17,6 +17,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "date-fns": "^4.4.0",
     "firebase": "^12.14.0",
     "firebase-admin": "^14.0.0",
