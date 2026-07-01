@@ -4,7 +4,16 @@
 // ============================================================
 import { notificationRepository } from '@/lib/repositories';
 import type { Notification, NotificationType, PaginatedResult } from '@/app/types';
-import type { DocumentSnapshot, Unsubscribe } from '@/lib/firebase/firestore';
+import {
+  query,
+  orderBy,
+  limit,
+  onSnapshot,
+  subcollections,
+  type DocumentSnapshot,
+  type Unsubscribe,
+  type QuerySnapshot,
+} from '@/lib/firebase/firestore';
 
 // --- Create Notification ---
 export async function createNotification(
@@ -43,7 +52,6 @@ export function subscribeToNotifications(
   userId: string,
   callback: (notifications: Notification[]) => void
 ): Unsubscribe {
-  const { query, orderBy, limit, onSnapshot, subcollections } = require('@/lib/firebase/firestore');
   const q = query(
     subcollections.userNotifications(userId),
     orderBy('createdAt', 'desc'),
@@ -52,18 +60,21 @@ export function subscribeToNotifications(
 
   return onSnapshot(
     q,
-    (snapshot: any) => {
+    (snapshot: QuerySnapshot) => {
       const notifications = snapshot.docs.map(
-        (d: any) => ({ id: d.id, ...d.data() }) as Notification
+        (d) => ({ id: d.id, ...d.data() }) as Notification
       );
       callback(notifications);
     },
-    (error: any) => {
-      const code = error?.code ?? 'unknown';
+    (error: unknown) => {
+      const code = (error as { code?: string })?.code ?? 'unknown';
       if (code === 'permission-denied') {
         console.warn('[notifications] subscription permission-denied');
       } else {
-        console.error('[notifications] subscription error:', error?.message ?? error);
+        console.error(
+          '[notifications] subscription error:',
+          error instanceof Error ? error.message : error
+        );
       }
       callback([]);
     }

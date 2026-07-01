@@ -32,12 +32,21 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+functions/.env
+!functions/.env.example
 
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
+tsconfig.tsbuildinfo
 next-env.d.ts
 
-testsprite_tests\tmp\config.json
+# firebase
+firebase-debug.log
+firebase-debug.*.log
+
+# test artifacts
+testsprite_tests/tmp/

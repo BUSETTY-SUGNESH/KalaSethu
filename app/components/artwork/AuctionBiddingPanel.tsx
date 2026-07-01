@@ -159,7 +159,7 @@ export default function AuctionBiddingPanel({
     } catch (error: unknown) {
       console.error('Bid error:', error);
       const err = error as { message?: string; code?: string };
-      let errorMessage = err.message || 'Could not place bid. Please try again.';
+      const errorMessage = err.message || 'Could not place bid. Please try again.';
       let title = 'Bid Failed';
       if (err.code === 'functions/unauthenticated') {
         title = 'Authentication Error';

@@ -54,7 +54,7 @@ It is built with **Next.js**, **Zustand**, and **Firebase** (Firestore, Auth, St
 - Firebase CLI (`npm i -g firebase-tools`)
 
 ### Environment Variables
-1. Copy `.env.local.example` to `.env.local`
+1. Copy `.env.example` to `.env.local`
 2. Fill in your Firebase Project credentials.
 
 ### Installation

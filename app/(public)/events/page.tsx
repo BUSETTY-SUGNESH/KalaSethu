@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Icon from '@/app/components/ui/Icon';
@@ -48,7 +48,7 @@ function computeSellerStats(organizerEvents: CalendarEvent[]) {
   };
 }
 
-export default function EventsPage() {
+function EventsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [publicEvents, setPublicEvents] = useState<CalendarEvent[]>([]);
@@ -331,5 +331,26 @@ export default function EventsPage() {
         )}
       </section>
     </>
+  );
+}
+
+export default function EventsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="container section-gap">
+          <div className="card skeleton" style={{ height: 200, marginBottom: 24 }} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: 32 }}>
+            {Array(3)
+              .fill(0)
+              .map((_, i) => (
+                <div key={i} className="card skeleton" style={{ height: 180 }} />
+              ))}
+          </div>
+        </div>
+      }
+    >
+      <EventsContent />
+    </Suspense>
   );
 }
